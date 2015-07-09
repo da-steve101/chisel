@@ -119,26 +119,41 @@ class LSDF(var totalWidth : Int = 0) extends Bits with Num[LSDF] {
   }
 
   // Arithmetic Helper Functions
-  def isLast(stg : Int) : Bool = Mux(counter(UInt(stg - 1), UInt(1)) === UInt(stg - 2), Bool(true), Bool(false))
+  def isLast(stg : Int) : Bool = Mux(counter(UInt(stg - 1), UInt(1)) === UInt(stg - 1), Bool(true), Bool(false))
     
   // Arithmetic Operators
   def unary_-() : LSDF = LSDF(0, this.getTotalWidth(), this.getWidth()) - this
 
-  def carryAdd(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = {
+  def fullAdder(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = (a + b + cin, (a & b) | (a & cin) | (b & cin))
 
+  def carryAdd(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = {
+    val cout = Vec.fill(b.getWidth + 1){UInt(width=1)}
+    cout(0) := cin
+    val res = Vec.fill(b.getWidth){UInt(width=1)}
+    for (i <- 0 until b.getWidth) {
+        val (r, c) = fullAdder(a(i), b(i), cout(i))
+        res(i) := r
+        cout(i+1) := c
+    }
+    (res.toBits.toUInt, cout(b.getWidth).toUInt)
   }
 
   def + (b : LSDF) : LSDF = {
     checkAligned(this, b)
     val newExample = isLast(getStages(b.getTotalWidth(), b.getWidth()))
     val x = Reg(init=UInt(0))
-    val (res, cout) := carryAdd(this.toUInt, b.toUInt, x)
-    x := Mux(!newExample, UInt(0, width=1), cout)
+    val (res, cout) = carryAdd(this.toUInt, b.toUInt, x)
+    x := Mux(newExample, UInt(0, width=1), cout)
     fromUInt(res)
   }
 
   def - (b : LSDF) : LSDF = {
-    fromUInt(this.toUInt - b.toUInt)
+    checkAligned(this, b)
+    val newExample = isLast(getStages(b.getTotalWidth(), b.getWidth()))
+    val x = Reg(init=UInt(1))
+    val (res, cout) = carryAdd(this.toUInt, ~b.toUInt, x)
+    x := Mux(newExample, UInt(1, width=1), cout)
+    fromUInt(res)
   }
 
 

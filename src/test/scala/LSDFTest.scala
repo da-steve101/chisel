@@ -210,17 +210,30 @@ class LSDFSuite extends TestSuite {
   }
 
   @Test def testCarry() {
-    class LSDFCarry extends Module {
+
+  //def fullAdder(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = 
+
+  //def carryAdd(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = {
+    //(res, cout(b.getWidth))
+  //}
+    
+  class LSDFCarry extends Module {
       val io = new Bundle {
         val a = UInt(INPUT, 2)
         val b = UInt(INPUT, 2)
         val res = UInt(OUTPUT, 2)
         val carry = UInt(OUTPUT, 1)
       }
-      val temp = UInt(width=(digit+1))
-      temp := io.a + io.b
-      io.carry := temp(digit)
-      io.res := temp
+    val cout = Vec.fill(io.b.getWidth + 1){Bool()}
+    val res = Vec.fill(io.b.getWidth){Bool()}
+    for (i <- 0 until io.b.getWidth) {
+        val r = (io.a(i) ^ io.b(i)) ^ cout(i)
+        val c = (io.a(i) & io.b(i)) | (io.a(i) & cout(i)) | (io.b(i) & cout(i))
+        res(i) := r
+        cout(i+1) := c
+    }
+      io.carry := cout(io.b.getWidth).toUInt
+      io.res := res.toBits.toUInt
     }
 
     class LSDFCarryTests(c : LSDFCarry) extends Tester(c) {
@@ -252,12 +265,12 @@ class LSDFSuite extends TestSuite {
       for (i <- 0 until trials) {
         val inA = BigInt(r.nextInt(1 << digit))
         val inB = BigInt(r.nextInt(1 << digit))
+        //val inA = BigInt(3)
+        //val inB = BigInt(13)
         poke(c.io.a, inA)
         poke(c.io.b, inB)
-        val res = inA + inB + prevResult
-        prevResult = if (res > BigInt(scala.math.pow(2, digit).toInt)) 1 else 0
-        println(inA + inB)
-        println(res)
+        var res = inA + inB + prevResult
+        prevResult = if (res >= BigInt(scala.math.pow(2, digit).toInt)) 1 else 0
         expect(c.io.res, res)
         step(1)
         count += 1
@@ -271,4 +284,48 @@ class LSDFSuite extends TestSuite {
 
     launchCppTester((c: LSDFAdd) => new LSDFAddTests(c))
   }
+  
+  //@Test def testSub() {
+    //class LSDFSub extends Module {
+      //val io = new Bundle {
+        //val a = LSDF(INPUT, width, digit)
+        //val b = LSDF(INPUT, width, digit)
+        //val res = LSDF(OUTPUT, width, digit)
+      //}
+      //io.res := io.a - io.b
+    //}
+
+    //class LSDFSubTests(c : LSDFSub) extends Tester(c) {
+      //val r = scala.util.Random
+      //var prevResult = 1
+      //var count = 0
+      //for (i <- 0 until trials) {
+        //val inA = ArrayBuffer[Int].fill(n){r.nextInt(1)}
+        //val inB = ArrayBuffer[Int].fill(n){r.nextInt(1)}
+        //val res = ArrayBuffer[Int].fill(n){0}
+        ////val inA = BigInt(r.nextInt(1 << digit))
+        ////val inB = BigInt(r.nextInt(1 << digit))
+        //for (j <- 0 until n) {
+            //poke(c.io.a, inA(j))
+            //poke(c.io.b, inB(j))
+            //res(j) = peek(c.io.res)
+            //step(1)
+        //}
+        //poke(c.io.a, inA)
+        //poke(c.io.b, inB)
+        //var res = inA - inB - prevResult
+        //prevResult = if (res >= BigInt(scala.math.pow(2, digit).toInt)) 1 else 0
+        //expect(c.io.res, res)
+        //step(1)
+        //count += 1
+        //if (count == n) {
+          //println("Reset")
+          //count = 0
+          //prevResult = 1
+        //}
+      //}
+    //}
+
+    //launchCppTester((c: LSDFSub) => new LSDFSubTests(c))
+  //}
 }
