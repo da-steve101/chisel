@@ -124,7 +124,7 @@ class LSDF(var totalWidth : Int = 0) extends Bits with Num[LSDF] {
   // Arithmetic Operators
   def unary_-() : LSDF = LSDF(0, this.getTotalWidth(), this.getWidth()) - this
 
-  def fullAdder(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = (a + b + cin, (a & b) | (a & cin) | (b & cin))
+  def fullAdder(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = ((a ^ b) ^ cin, (a & b) | (a & cin) | (b & cin))
 
   def carryAdd(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = {
     val cout = Vec.fill(b.getWidth + 1){UInt(width=1)}
@@ -135,7 +135,7 @@ class LSDF(var totalWidth : Int = 0) extends Bits with Num[LSDF] {
         res(i) := r
         cout(i+1) := c
     }
-    (res.toBits.toUInt, cout(b.getWidth).toUInt)
+    (res.toBits.toUInt, cout(b.getWidth))
   }
 
   def + (b : LSDF) : LSDF = {
@@ -146,7 +146,7 @@ class LSDF(var totalWidth : Int = 0) extends Bits with Num[LSDF] {
     x := Mux(newExample, UInt(0, width=1), cout)
     fromUInt(res)
   }
-
+  
   def - (b : LSDF) : LSDF = {
     checkAligned(this, b)
     val newExample = isLast(getStages(b.getTotalWidth(), b.getWidth()))
