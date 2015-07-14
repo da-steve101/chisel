@@ -49,15 +49,13 @@ object LSDF {
   def apply(dir : IODirection = null, width : Int = -1, digit : Int = 1) : LSDF = {
     val res = new LSDF(width);
     res.create(dir, digit)
-    res
+   res
   }
 
 }
 
-class LSDF(var totalWidth : Int = 0) extends Bits with Num[LSDF] {
+class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with Num[LSDF] {
   type T = LSDF
-
-  val first : Bool = Bool(true)
 
   def getStages(totalWidth : Int, digit : Int) = scala.math.round(totalWidth.toDouble/digit.toDouble).toInt
 
@@ -69,19 +67,31 @@ class LSDF(var totalWidth : Int = 0) extends Bits with Num[LSDF] {
   def getTotalWidth() : Int = this.totalWidth
 
   /* Fixed Factory Method */
-  override def fromNode(n : Node): this.type = LSDF(OUTPUT, this.getTotalWidth(), this.getWidth()).asTypeFor(n).asInstanceOf[this.type]
+  override def fromNode(n : Node): this.type = {
+    val res = LSDF(OUTPUT, this.getTotalWidth(), this.getWidth()).asTypeFor(n).asInstanceOf[this.type]
+    if (n.isReg) res.regDelay += 1
+    println("FromNode")
+    res
+  }
 
   override def fromInt(x : Int) : this.type = LSDF(x, this.getTotalWidth(), this.getWidth()).asInstanceOf[this.type]
 
-  override def cloneType: this.type = LSDF(this.dir, this.getTotalWidth(), this.getWidth()).asInstanceOf[this.type];
+  override def cloneType: this.type = {
+    val res = LSDF(this.dir, this.getTotalWidth(), this.getWidth()).asInstanceOf[this.type]
+    res.regDelay += 1
+    println("cloneType")
+    res
+  }
 
-  def fromUInt(s : UInt) : LSDF = chiselCast(s){LSDF(INPUT, this.getWidth, this.getTotalWidth)}
+  def fromUInt(s : UInt) : LSDF = chiselCast(s){LSDF(INPUT, this.getTotalWidth(), this.getWidth())}
 
 
   def wrapAround(n: UInt, max: UInt) = Mux(n > max, UInt(0), n)
 
   def counter(max: UInt, amt: UInt): UInt = {
-    val x = Reg(init=UInt(0, max.getWidth))
+    val init = if(regDelay == 0) 0 else getStages(this.getTotalWidth(), this.getWidth()) - regDelay - 2
+    println(init) 
+    val x = Reg(init=UInt(init, max.getWidth()))
     x := wrapAround(x + amt, max)
     x
   }
@@ -139,12 +149,15 @@ class LSDF(var totalWidth : Int = 0) extends Bits with Num[LSDF] {
   }
 
   def + (b : LSDF) : LSDF = {
+    println(this.isReg)
+    println(b.isReg)
     checkAligned(this, b)
     val newExample = isLast(getStages(b.getTotalWidth(), b.getWidth()))
     val x = Reg(init=UInt(0))
     val (res, cout) = carryAdd(this.toUInt, b.toUInt, x)
     x := Mux(newExample, UInt(0, width=1), cout)
-    fromUInt(res)
+    val theResult = fromUInt(res)
+    theResult
   }
   
   def - (b : LSDF) : LSDF = {
@@ -153,13 +166,31 @@ class LSDF(var totalWidth : Int = 0) extends Bits with Num[LSDF] {
     val x = Reg(init=UInt(1))
     val (res, cout) = carryAdd(this.toUInt, ~b.toUInt, x)
     x := Mux(newExample, UInt(1, width=1), cout)
-    fromUInt(res)
+    val theResult = fromUInt(res)
+    theResult
   }
 
-
   def * (b : LSDF) : LSDF = {
-    fromUInt(this.toUInt * b.toUInt)
-    //fromUInt(temp >> UInt(this.fractionalWidth))
+    checkAligned(this, b)
+    println(this.isReg)
+    println(b.isReg)
+    val stg = getStages(this.getTotalWidth(), this.getWidth())
+    val count = counter(UInt(stg - 1), UInt(1)) 
+    val digitCount = counter(UInt(this.getTotalWidth() - 1), UInt(this.getWidth())) 
+    val x1 = Reg(init=UInt(0, width=this.getTotalWidth()))
+    val x2 = Reg(init=UInt(0, width=b.getTotalWidth()))
+    
+    val newX1fl = (this.toUInt << digitCount) | x1
+    val newX1 = Mux(count === UInt(0), this.toUInt, newX1fl) 
+    
+    val newX2fl = (b.toUInt << digitCount) | x2
+    val newX2 = Mux(count === UInt(0), b.toUInt, newX2fl) 
+    
+    val res = (newX1 * newX2) >> digitCount 
+    x1 := newX1
+    x2 := newX2
+    val theResult = fromUInt(res)
+    theResult
   }
 
   def / (b : LSDF) : LSDF = {

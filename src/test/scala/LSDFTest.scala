@@ -55,7 +55,7 @@ class LSDFSuite extends TestSuite {
     val res = LSDF(INPUT, width, digit)
     assert(res.getTotalWidth() == width)
   }
-  
+
   @Test def testWire() {
     class LSDFWire extends Module {
       val io = new Bundle {
@@ -319,7 +319,7 @@ class LSDFSuite extends TestSuite {
         }
         val expectedResult = inA + inB
         val expected = if ((inA + inB) == result) true else false
-        expect(expected, "Expected: " + exp)
+        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + result.toString)
       }
     }
 
@@ -341,22 +341,150 @@ class LSDFSuite extends TestSuite {
       var prevResult = 1
       var count = 0
       for (i <- 0 until trials) {
-        val inA = BigInt(r.nextInt(1 << digit))
-        val inB = BigInt(r.nextInt(1 << digit))
-        poke(c.io.a, inA)
-        poke(c.io.b, inB)
-        var res = inA + ~inB + prevResult
-        expect(c.io.res, res)
-        step(1)
-        count += 1
-        if (count == n) {
-          println("Reset")
-          count = 0
-          prevResult = 1
+        var inA = BigInt(r.nextInt(1 << width - 2))
+        var inB = BigInt(r.nextInt(1 << width - 2))
+        // LSDF Currently only supports UInt
+        while (inA < inB) {
+          inA = BigInt(r.nextInt(1 << width - 2))
+          inB = BigInt(r.nextInt(1 << width - 2))
         }
+        var result = BigInt(0)
+        for (j <- 0 until n) {
+          val currA = (inA & BigInt(0xF << (digit*j))) >> (digit*j)
+          val currB = (inB & BigInt(0xF << (digit*j))) >> (digit*j)
+          poke(c.io.a, currA)
+          poke(c.io.b, currB)
+          val res = peek(c.io.res)
+          step(1)
+          for (k <- 0 until digit) {
+            val set = if ((res & BigInt(1 << k)) == BigInt(scala.math.pow(2, k).toInt)) true else false
+            result = if (set) result.setBit(digit*j + k) else result
+          }
+        }
+        val expectedResult = inA - inB
+        val expected = if (expectedResult == result) true else false
+        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + result.toString)
       }
     }
-
+    
     launchCppTester((c: LSDFSub) => new LSDFSubTests(c))
+  }
+
+  @Test def testMul() {
+    class LSDFMul extends Module {
+      val io = new Bundle {
+        val a = LSDF(INPUT, width, digit)
+        val b = LSDF(INPUT, width, digit)
+        val res = LSDF(OUTPUT, width, digit)
+      }
+      io.res := io.a * io.b
+    }
+    class LSDFMulTests(c : LSDFMul) extends Tester(c) {
+      val r = scala.util.Random
+      var prevResult = 1
+      var count = 0
+      for (i <- 0 until trials) {
+        val inA = BigInt(r.nextInt(1 << (width - 1)/2))
+        val inB = BigInt(r.nextInt(1 << (width - 1)/2))
+        var result = BigInt(0)
+        for (j <- 0 until n) {
+          val currA = (inA & BigInt(0xF << (digit*j))) >> (digit*j)
+          val currB = (inB & BigInt(0xF << (digit*j))) >> (digit*j)
+          poke(c.io.a, currA)
+          poke(c.io.b, currB)
+          val res = peek(c.io.res)
+          step(1)
+          for (k <- 0 until digit) {
+            val set = if ((res & BigInt(1 << k)) == BigInt(scala.math.pow(2, k).toInt)) true else false
+            result = if (set) result.setBit(digit*j + k) else result
+          }
+        }
+        val expectedResult = inA * inB
+        val expected = if (expectedResult == result) true else false
+        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + result.toString)
+      }
+    }
+    
+    launchCppTester((c: LSDFMul) => new LSDFMulTests(c))
+  }
+  
+  @Test def testBasic() {
+    class LSDFBasic extends Module {
+      val io = new Bundle {
+        val a = LSDF(INPUT, width, digit)
+        val b = LSDF(INPUT, width, digit)
+        val res = LSDF(OUTPUT, width, digit)
+      }
+      val temp = io.a * io.b
+      io.res := temp + io.a
+    }
+
+    class LSDFBasicTests(c : LSDFBasic) extends Tester(c) {
+      val r = scala.util.Random
+      var prevResult = 1
+      var count = 0
+      for (i <- 0 until trials) {
+        val inA = BigInt(r.nextInt(1 << (width - 1)/2))
+        val inB = BigInt(r.nextInt(1 << (width - 1)/2))
+        var result = BigInt(0)
+        for (j <- 0 until n) {
+          val currA = (inA & BigInt(0xF << (digit*j))) >> (digit*j)
+          val currB = (inB & BigInt(0xF << (digit*j))) >> (digit*j)
+          poke(c.io.a, currA)
+          poke(c.io.b, currB)
+          val res = peek(c.io.res)
+          step(1)
+          for (k <- 0 until digit) {
+            val set = if ((res & BigInt(1 << k)) == BigInt(scala.math.pow(2, k).toInt)) true else false
+            result = if (set) result.setBit(digit*j + k) else result
+          }
+        }
+        val expectedResult = (inA * inB) + inA
+        val expected = if (expectedResult == result) true else false
+        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + result.toString)
+      }
+    }
+    
+    launchCppTester((c: LSDFBasic) => new LSDFBasicTests(c))
+  }
+
+  @Test def testBasicReg() {
+    class LSDFBasicReg extends Module {
+      val io = new Bundle {
+        val a = LSDF(INPUT, width, digit)
+        val b = LSDF(INPUT, width, digit)
+        val res = LSDF(OUTPUT, width, digit)
+      }
+      val temp = Reg(io.a * io.b)
+      io.res := temp + io.a
+    }
+
+    class LSDFBasicRegTests(c : LSDFBasicReg) extends Tester(c) {
+      val r = scala.util.Random
+      var prevResult = 1
+      var count = 0
+      for (i <- 0 until trials) {
+        val inA = BigInt(r.nextInt(1 << (width - 1)/2))
+        val inB = BigInt(r.nextInt(1 << (width - 1)/2))
+        var result = BigInt(0)
+        for (j <- 0 until n) {
+          val currA = (inA & BigInt(0xF << (digit*j))) >> (digit*j)
+          val currB = (inB & BigInt(0xF << (digit*j))) >> (digit*j)
+          poke(c.io.a, currA)
+          poke(c.io.b, currB)
+          step(1)
+          val res = peek(c.io.res)
+          for (k <- 0 until digit) {
+            val set = if ((res & BigInt(1 << k)) == BigInt(scala.math.pow(2, k).toInt)) true else false
+            result = if (set) result.setBit(digit*j + k) else result
+          }
+        }
+        val expectedResult = (inA * inB) + inA
+        val expected = if (expectedResult == result) true else false
+        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + result.toString)
+      }
+    }
+    
+    launchCppTester((c: LSDFBasicReg) => new LSDFBasicRegTests(c))
   }
 }
