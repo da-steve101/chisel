@@ -455,8 +455,8 @@ class LSDFSuite extends TestSuite {
         val b = LSDF(INPUT, width, digit)
         val res = LSDF(OUTPUT, width, digit)
       }
-      val temp = Reg(io.a * io.b)
-      io.res := temp + io.a
+      val temp = Reg(io.a + io.b)
+      io.res := temp * io.a
     }
 
     class LSDFBasicRegTests(c : LSDFBasicReg) extends Tester(c) {

@@ -88,9 +88,9 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
 
   def wrapAround(n: UInt, max: UInt) = Mux(n > max, UInt(0), n)
 
-  def counter(max: UInt, amt: UInt): UInt = {
-    val init = if(regDelay == 0) 0 else getStages(this.getTotalWidth(), this.getWidth()) - regDelay - 2
+  def counter(max: UInt, amt: UInt, init : Int = 0): UInt = {
     println(init) 
+    println(max.litValue())
     val x = Reg(init=UInt(init, max.getWidth()))
     x := wrapAround(x + amt, max)
     x
@@ -175,8 +175,11 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
     println(this.isReg)
     println(b.isReg)
     val stg = getStages(this.getTotalWidth(), this.getWidth())
-    val count = counter(UInt(stg - 1), UInt(1)) 
-    val digitCount = counter(UInt(this.getTotalWidth() - 1), UInt(this.getWidth())) 
+    val init = if(this.regDelay == 0) 0 else stg - 1 - regDelay
+    val count = counter(UInt(stg - 1), UInt(1), init) 
+    val digitInit = if(this.regDelay == 0) 0 else this.getTotalWidth() - 1 - regDelay*this.getWidth()
+    println("digitInit: " + digitInit.toString)
+    val digitCount = counter(UInt(this.getTotalWidth() - 1), UInt(this.getWidth()), digitInit) 
     val x1 = Reg(init=UInt(0, width=this.getTotalWidth()))
     val x2 = Reg(init=UInt(0, width=b.getTotalWidth()))
     
