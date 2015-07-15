@@ -64,6 +64,11 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
     if(a.getTotalWidth() != b.getTotalWidth()) ChiselError.error("LSBF Digit-Serial: Width Miss Match")
   }
 
+  def checkRegDelay(a : LSDF, b : LSDF) {
+    if (a.getRegDelay() != b.getRegDelay()) ChiselError.error("LSDF Digit-Serial: Cycle Delays are Unaligned by: " + scala.math.abs(a.getRegDelay() - b.getRegDelay()) + "\nInput 1 Delay: " + a.getRegDelay() + "\nInput 2 Delay: " + b.getRegDelay() )
+  }
+
+  def getRegDelay() : Int = this.regDelay
   def getTotalWidth() : Int = this.totalWidth
 
   /* Fixed Factory Method */
@@ -81,6 +86,60 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
     res.regDelay += 1
     println("cloneType")
     res
+  }
+
+  def findPreviousLSDF(start : Node) : LSDF = {
+    // Breath Search
+    val q = new scala.collection.mutable.Queue[Node]
+    q.enqueue(start)
+    while(!q.isEmpty) {
+      val v = q.dequeue()
+      v match {
+        case l : LSDF => return l
+        case _ => v.inputs.foreach(i => q.enqueue(i))
+      }
+    }
+    LSDF(0, 0, 0) 
+  }
+
+  override def assign(src: Node): Unit = {
+    println("assign") 
+    println(src)
+    val prevLSDF = findPreviousLSDF(src)
+    println(prevLSDF)
+    this.regDelay = prevLSDF.regDelay
+    super.assign(src)
+  }
+
+  override def procAssign(src: Node): Unit = {
+    println("procAssign")
+    println(src)
+    val prevLSDF = findPreviousLSDF(src)
+    println(prevLSDF)
+    this.regDelay = prevLSDF.regDelay
+    super.procAssign(src)
+}
+
+  override protected def colonEquals(that : Bits): Unit = that match {
+    case l: LSDF => {
+      println("colonEquals")
+      println("this: " + this.name + "\t" + this.regDelay)
+      println("that: " + l.name + "\t" + l.regDelay)
+      this.regDelay = l.regDelay
+      super.colonEquals(l)
+    }
+    case _ => illegalAssignment(that)
+  }
+
+  override def <>(src: Node): Unit = src match {
+    case l : LSDF => {
+      println("<>")
+      println("this: " + this.regDelay)
+      println("that: " + l.regDelay)
+      this.regDelay = l.regDelay
+      l <> this
+    }
+    case _ => src <> this 
   }
 
   def fromUInt(s : UInt) : LSDF = chiselCast(s){LSDF(INPUT, this.getTotalWidth(), this.getWidth())}
@@ -170,19 +229,18 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
     theResult
   }
 
-  def * (b : LSDF) : LSDF = {
+ def * (b : LSDF) : LSDF = {
     checkAligned(this, b)
-    println(this.isReg)
-    println(b.isReg)
+    checkRegDelay(this, b)
     val stg = getStages(this.getTotalWidth(), this.getWidth())
-    val init = if(this.regDelay == 0) 0 else stg - 1 - regDelay
+    val init = if(this.regDelay == 0) 0 else stg - regDelay
     val count = counter(UInt(stg - 1), UInt(1), init) 
-    val digitInit = if(this.regDelay == 0) 0 else this.getTotalWidth() - 1 - regDelay*this.getWidth()
+    val digitInit = if(this.regDelay == 0) 0 else this.getTotalWidth() - regDelay*this.getWidth()
     println("digitInit: " + digitInit.toString)
-    val digitCount = counter(UInt(this.getTotalWidth() - 1), UInt(this.getWidth()), digitInit) 
+    val digitCount = counter(UInt(this.getTotalWidth() - this.getWidth()), UInt(this.getWidth()), digitInit) 
     val x1 = Reg(init=UInt(0, width=this.getTotalWidth()))
     val x2 = Reg(init=UInt(0, width=b.getTotalWidth()))
-    
+   
     val newX1fl = (this.toUInt << digitCount) | x1
     val newX1 = Mux(count === UInt(0), this.toUInt, newX1fl) 
     
@@ -192,8 +250,7 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
     val res = (newX1 * newX2) >> digitCount 
     x1 := newX1
     x2 := newX2
-    val theResult = fromUInt(res)
-    theResult
+    fromUInt(res)
   }
 
   def / (b : LSDF) : LSDF = {

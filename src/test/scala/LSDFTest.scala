@@ -401,7 +401,7 @@ class LSDFSuite extends TestSuite {
         }
         val expectedResult = inA * inB
         val expected = if (expectedResult == result) true else false
-        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + result.toString)
+        expect(expected, "Expected: " + expectedResult.toString + " (" + expectedResult.toInt.toHexString + ")" + "\tGot: " + result.toString + " (" + result.toInt.toHexString + ")")
       }
     }
     
@@ -441,7 +441,7 @@ class LSDFSuite extends TestSuite {
         }
         val expectedResult = (inA * inB) + inA
         val expected = if (expectedResult == result) true else false
-        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + result.toString)
+        expect(expected, "Expected: " + expectedResult.toString + " (" + expectedResult.toInt.toHexString + ")" + "\tGot: " + result.toString + " (" + result.toInt.toHexString + ")")
       }
     }
     
@@ -455,8 +455,10 @@ class LSDFSuite extends TestSuite {
         val b = LSDF(INPUT, width, digit)
         val res = LSDF(OUTPUT, width, digit)
       }
-      val temp = Reg(io.a + io.b)
-      io.res := temp * io.a
+      val temp = Reg(next=io.a + io.b)
+      val aReg = Reg(next=io.a)
+
+      io.res := temp * aReg
     }
 
     class LSDFBasicRegTests(c : LSDFBasicReg) extends Tester(c) {
@@ -467,6 +469,7 @@ class LSDFSuite extends TestSuite {
         val inA = BigInt(r.nextInt(1 << (width - 1)/2))
         val inB = BigInt(r.nextInt(1 << (width - 1)/2))
         var result = BigInt(0)
+        var resultAdd = BigInt(0)
         for (j <- 0 until n) {
           val currA = (inA & BigInt(0xF << (digit*j))) >> (digit*j)
           val currB = (inB & BigInt(0xF << (digit*j))) >> (digit*j)
@@ -479,12 +482,66 @@ class LSDFSuite extends TestSuite {
             result = if (set) result.setBit(digit*j + k) else result
           }
         }
-        val expectedResult = (inA * inB) + inA
+        val expectedResult = (inA + inB) * inA
         val expected = if (expectedResult == result) true else false
-        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + result.toString)
+        expect(expected, "Expected: " + expectedResult.toString + " (" + expectedResult.toInt.toHexString + ")" + "\tGot: " + result.toString + " (" + result.toInt.toHexString + ")")
       }
     }
     
     launchCppTester((c: LSDFBasicReg) => new LSDFBasicRegTests(c))
+  }
+
+  @Test def testBundleReg() {
+    class LSDFBundleReg extends Module {
+      val io = new Bundle {
+        val a = LSDF(INPUT, width, digit)
+        val b = LSDF(INPUT, width, digit)
+        val res = LSDF(OUTPUT, width, digit)
+      }
+      val temp = Reg(next=io.a + io.b)
+      val aReg = Reg(next=io.a)
+      val mul = Module(new LSDFMulT()).io
+      mul.a := temp
+      mul.b := aReg
+      io.res := mul.res
+    }
+
+    class LSDFMulT extends Module {
+      val io = new Bundle {
+        val a = LSDF(INPUT, width, digit)
+        val b = LSDF(INPUT, width, digit)
+        val res = LSDF(OUTPUT, width, digit)
+      }
+      io.res := io.a * io.b
+    }
+
+    class LSDFBundleRegTests(c : LSDFBundleReg) extends Tester(c) {
+      val r = scala.util.Random
+      var prevResult = 1
+      var count = 0
+      for (i <- 0 until trials) {
+        val inA = BigInt(r.nextInt(1 << (width - 1)/2))
+        val inB = BigInt(r.nextInt(1 << (width - 1)/2))
+        var result = BigInt(0)
+        var resultAdd = BigInt(0)
+        for (j <- 0 until n) {
+          val currA = (inA & BigInt(0xF << (digit*j))) >> (digit*j)
+          val currB = (inB & BigInt(0xF << (digit*j))) >> (digit*j)
+          poke(c.io.a, currA)
+          poke(c.io.b, currB)
+          step(1)
+          val res = peek(c.io.res)
+          for (k <- 0 until digit) {
+            val set = if ((res & BigInt(1 << k)) == BigInt(scala.math.pow(2, k).toInt)) true else false
+            result = if (set) result.setBit(digit*j + k) else result
+          }
+        }
+        val expectedResult = (inA + inB) * inA
+        val expected = if (expectedResult == result) true else false
+        expect(expected, "Expected: " + expectedResult.toString + " (" + expectedResult.toInt.toHexString + ")" + "\tGot: " + result.toString + " (" + result.toInt.toHexString + ")")
+      }
+    }
+    
+    launchCppTester((c: LSDFBundleReg) => new LSDFBundleRegTests(c))
   }
 }
