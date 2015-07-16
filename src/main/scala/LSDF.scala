@@ -91,19 +91,30 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
 
   def printGraph(start : Node) {
     val q = new scala.collection.mutable.Queue[Node]
-    var visited : List[Int] = List()
+    val edges : List[Int] = start.inputs.toList.collect{ case s : Node => s._id}
+    var map = scala.collection.mutable.Map(start._id -> edges)
+    var visited : List[Int] = List(start._id)
     var i = 0
     q.enqueue(start)
+    visited :::= List(start._id)
     while(!q.isEmpty) {
       val v = q.dequeue()
       print(v._id.toString + "\t")
+      print(v.component.toString + "\t")
+      v.inputs.foreach(l => print(l._id.toString + "\t"))
+      print(v.isReg + "\t")
       println(v)
-      visited :::= List(v._id)
+      
       i += 1
-      v.inputs.foreach(l => if (!visited.contains(l._id)) q.enqueue(l))
-      if (i > 400) return
+      v.inputs.foreach(l => if (!visited.contains(l._id)) {
+        visited :::= List(l._id)
+        val edges : List[Int] = l.inputs.toList.collect{ case s : Node => s._id}
+        map += (l._id -> edges)
+        q.enqueue(l)
+        }) 
     }
     println(visited.sorted)
+    println(map)
     println(i) 
   }
 
