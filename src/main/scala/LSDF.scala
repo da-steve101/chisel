@@ -32,6 +32,7 @@ package Chisel
 
 import Node._
 import ChiselError._
+import java.io.PrintStream
 
 object LSDF {
 
@@ -88,6 +89,40 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
     res
   }
 
+  def printGraph(start : Node) {
+    val q = new scala.collection.mutable.Queue[Node]
+    var visited : List[Int] = List()
+    var i = 0
+    q.enqueue(start)
+    while(!q.isEmpty) {
+      val v = q.dequeue()
+      print(v._id.toString + "\t")
+      println(v)
+      visited :::= List(v._id)
+      i += 1
+      v.inputs.foreach(l => if (!visited.contains(l._id)) q.enqueue(l))
+      if (i > 400) return
+    }
+    println(visited.sorted)
+    println(i) 
+  }
+
+  def findIdOne(start : Node) {
+    val q = new scala.collection.mutable.Queue[Node]
+    q.enqueue(start)
+    var id = 100
+    var head : Node = null
+    while(!q.isEmpty) {
+      val v = q.dequeue()
+      if (v._id > id) {
+        id = v._id
+        head = v
+      }
+      v.inputs.foreach(i => q.enqueue(i))
+    }
+    printGraph(head)
+  }
+
   def findPreviousLSDF(start : Node) : LSDF = {
     // Breath Search
     val q = new scala.collection.mutable.Queue[Node]
@@ -104,7 +139,7 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
 
   override def assign(src: Node): Unit = {
     println("assign") 
-    println(src)
+    printGraph(src)
     val prevLSDF = findPreviousLSDF(src)
     println(prevLSDF)
     this.regDelay = prevLSDF.regDelay
@@ -113,7 +148,7 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
 
   override def procAssign(src: Node): Unit = {
     println("procAssign")
-    println(src)
+    printGraph(src)
     val prevLSDF = findPreviousLSDF(src)
     println(prevLSDF)
     this.regDelay = prevLSDF.regDelay

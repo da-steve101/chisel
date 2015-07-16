@@ -41,7 +41,7 @@ import Chisel._
 /** This testsuite checks all methods in the Bits class.
 */
 class LSDFSuite extends TestSuite {
-  val trials = 10
+  val trials = 1
   val digit = 4
   val width = 32
   val n = width/digit
