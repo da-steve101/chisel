@@ -58,6 +58,8 @@ object LSDF {
 class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with Num[LSDF] {
   type T = LSDF
 
+  val rnd = scala.util.Random
+  
   def getStages(totalWidth : Int, digit : Int) = scala.math.round(totalWidth.toDouble/digit.toDouble).toInt
 
   def checkAligned(a : LSDF, b : LSDF) {
@@ -89,80 +91,98 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
     res
   }
 
-  def printGraph(start : Node) {
+  def getNodeGraph(start : Node) : (List[Node], List[Int], Map[Int, List[Int]]) =  {
     val q = new scala.collection.mutable.Queue[Node]
-    val edges : List[Int] = start.inputs.toList.collect{ case s : Node => s._id}
-    var map = scala.collection.mutable.Map(start._id -> edges)
+    val vertex : List[Int] = start.inputs.toList.collect{ case s : Node => s._id}
+    val elements = scala.collection.mutable.ArrayBuffer(start)
+    var edges = scala.collection.mutable.Map(start._id -> vertex)
     var visited : List[Int] = List(start._id)
     var i = 0
     q.enqueue(start)
     visited :::= List(start._id)
     while(!q.isEmpty) {
       val v = q.dequeue()
-      print(v._id.toString + "\t")
-      print(v.component.toString + "\t")
-      v.inputs.foreach(l => print(l._id.toString + "\t"))
-      print(v.isReg + "\t")
-      println(v)
-      
       i += 1
       v.inputs.foreach(l => if (!visited.contains(l._id)) {
         visited :::= List(l._id)
-        val edges : List[Int] = l.inputs.toList.collect{ case s : Node => s._id}
-        map += (l._id -> edges)
+        val vertex : List[Int] = l.inputs.toList.collect{ case s : Node => s._id}
+        edges += (l._id -> vertex)
+        elements.append(l)
         q.enqueue(l)
         }) 
     }
-    println(visited.sorted)
-    println(map)
-    println(i) 
+    (elements.toList, vertex, edges.toMap) 
   }
 
-  def findIdOne(start : Node) {
-    val q = new scala.collection.mutable.Queue[Node]
-    q.enqueue(start)
-    var id = 100
-    var head : Node = null
-    while(!q.isEmpty) {
-      val v = q.dequeue()
-      if (v._id > id) {
-        id = v._id
-        head = v
-      }
-      v.inputs.foreach(i => q.enqueue(i))
-    }
-    printGraph(head)
+  val lsdfRegisterNames : List[String] = List("Register_x1_LSDFMULT", 
+                                              "Register_x2_LSDFMULT", 
+                                              "Register_count_LSDFMULT", 
+                                              "Register_digitCount_LSDFMULT",
+                                              "Register_count_LSDFADD",
+                                              "Register_carry_LSDFADD",
+                                              "Register_count_LSDFSUB",
+                                              "Register_carry_LSDFSUB")
+
+  def findUserRegisters(elements : List[Node]) : List[Node] = elements.filter(_.isReg).filter(r => !lsdfRegisterNames.contains(r.name.reverse.dropWhile(_ != '_').drop(1).reverse))
+
+  def countRegisters(inputNode : Node) : Int = {
+    // Now that we only have the user registers, we need to check that each input for the node has the same amount of register delay
+    val (userRegElements, userRegVertex, userRegEdges) = getNodeGraph(inputNode)
+    val userRegisters = findUserRegisters(userRegElements)
+    println("userRegisters: " + inputNode._id.toString + " - " + userRegisters.length.toString)
+    userRegisters.length
   }
 
-  def findPreviousLSDF(start : Node) : LSDF = {
-    // Breath Search
-    val q = new scala.collection.mutable.Queue[Node]
-    q.enqueue(start)
-    while(!q.isEmpty) {
-      val v = q.dequeue()
-      v match {
-        case l : LSDF => return l
-        case _ => v.inputs.foreach(i => q.enqueue(i))
-      }
-    }
-    LSDF(0, 0, 0) 
+  def printInputs(inputNode : Node, it : Int) {
+    inputNode.inputs.zipWithIndex.map(e => println("Head:\t" + inputNode._id + "\tInput:\t" + e._2 + "\t-\t" + e._1._id + "\t::\t" + e))
+    if (it != 0) inputNode.inputs.map(n => printInputs(n, it - 1))
   }
+
+  def countNodeId(elements : List[Node]) : Map[Int, Int] = elements.groupBy(l => l._id).map(t => (t._1, t._2.length))
+
+  val inputOPNodes : List[String] = List("LSDFADD_Input1",
+                                         "LSDFADD_Input2",
+                                         "LSDFSUB_Input1",
+                                         "LSDFSUB_Input2",
+                                         "LSDFMULT_Input1",
+                                         "LSDFMULT_Input2")
+
+  def findOPInputs(inputNode : Node, maxDepth : Int = 20) {
+    if (inputOPNodes.contains(inputNode.name.reverse.dropWhile(_ != '_').drop(1).reverse)) {
+      countRegisters(inputNode)
+    } else if (maxDepth == 0) {
+      println("Failed to Find inputNodes")
+    } else {
+      inputNode.inputs.map(n => findOPInputs(n, maxDepth - 1))
+    }
+  }
+
+  // def findPreviousLSDF(elements : List[Node], vertex : List[Int], edges : Map[Int, List[Int]]) : LSDF = {
+  //   // Breath Search
+  //   elements.foreach(i => i match { case l : LSDF => return l })
+  // }
 
   override def assign(src: Node): Unit = {
     println("assign") 
-    printGraph(src)
-    val prevLSDF = findPreviousLSDF(src)
-    println(prevLSDF)
-    this.regDelay = prevLSDF.regDelay
+    val (elements, vertex, edges) = getNodeGraph(src)
+    val registerCount = countRegisters(src)
+    findOPInputs(src)
+    printInputs(src, 3)
+    // val prevLSDF = findPreviousLSDF(elements, vertex, edges)
+    // println(prevLSDF)
+    // this.regDelay = that.regDelay
     super.assign(src)
   }
 
   override def procAssign(src: Node): Unit = {
     println("procAssign")
-    printGraph(src)
-    val prevLSDF = findPreviousLSDF(src)
-    println(prevLSDF)
-    this.regDelay = prevLSDF.regDelay
+    val (elements, vertex, edges) = getNodeGraph(src)
+    val registerCount = countRegisters(src)
+    findOPInputs(src)
+    printInputs(src, 3)
+    // val prevLSDF = findPreviousLSDF(elements, vertex, edges)
+    // println(prevLSDF)
+    // this.regDelay = that.regDelay
     super.procAssign(src)
 }
 
@@ -254,12 +274,17 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
   }
 
   def + (b : LSDF) : LSDF = {
-    println(this.isReg)
-    println(b.isReg)
     checkAligned(this, b)
-    val newExample = isLast(getStages(b.getTotalWidth(), b.getWidth()))
+    this.nameIt("LSDFADD_Input1_" + scala.math.abs(rnd.nextInt()).toString, false)
+    b.nameIt("LSDFADD_Input2_" + scala.math.abs(rnd.nextInt()).toString, false)
+    val stg = getStages(this.getTotalWidth(), this.getWidth())
+    val init = if(this.regDelay == 0) 0 else stg - regDelay
+    val count = counter(UInt(stg - 1), UInt(1), init) 
+    count.nameIt("Register_count_LSDFADD_" + scala.math.abs(rnd.nextInt()).toString, false)
     val x = Reg(init=UInt(0))
+    x.nameIt("Register_carry_LSDFADD_" + scala.math.abs(rnd.nextInt()).toString, false)
     val (res, cout) = carryAdd(this.toUInt, b.toUInt, x)
+    val newExample = Mux(count === UInt(stg - 1), Bool(true), Bool(false))
     x := Mux(newExample, UInt(0, width=1), cout)
     val theResult = fromUInt(res)
     theResult
@@ -267,26 +292,40 @@ class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with N
   
   def - (b : LSDF) : LSDF = {
     checkAligned(this, b)
-    val newExample = isLast(getStages(b.getTotalWidth(), b.getWidth()))
+    this.nameIt("LSDFSUB_Input1_" + scala.math.abs(rnd.nextInt()).toString, false)
+    b.nameIt("LSDFSUB_Input2_" + scala.math.abs(rnd.nextInt()).toString, false)
+    val stg = getStages(this.getTotalWidth(), this.getWidth())
+    val init = if(this.regDelay == 0) 0 else stg - regDelay
+    val count = counter(UInt(stg - 1), UInt(1), init) 
+    count.nameIt("Register_count_LSDFSUB_" + scala.math.abs(rnd.nextInt()).toString, false)
     val x = Reg(init=UInt(1))
+    x.nameIt("Register_carry_LSDFSUB_" + scala.math.abs(rnd.nextInt()).toString, false)
     val (res, cout) = carryAdd(this.toUInt, ~b.toUInt, x)
+    val newExample = Mux(count === UInt(stg - 1), Bool(true), Bool(false))
     x := Mux(newExample, UInt(1, width=1), cout)
     val theResult = fromUInt(res)
     theResult
   }
 
  def * (b : LSDF) : LSDF = {
+    // Random Number Generator for naming the Registers.
     checkAligned(this, b)
-    checkRegDelay(this, b)
+    this.nameIt("LSDFMULT_Input1_" + scala.math.abs(rnd.nextInt()).toString, false)
+    b.nameIt("LSDFMULT_Input2_" + scala.math.abs(rnd.nextInt()).toString, false)
     val stg = getStages(this.getTotalWidth(), this.getWidth())
     val init = if(this.regDelay == 0) 0 else stg - regDelay
     val count = counter(UInt(stg - 1), UInt(1), init) 
+    count.nameIt("Register_count_LSDFMULT_" + scala.math.abs(rnd.nextInt()).toString, false)
     val digitInit = if(this.regDelay == 0) 0 else this.getTotalWidth() - regDelay*this.getWidth()
     println("digitInit: " + digitInit.toString)
     val digitCount = counter(UInt(this.getTotalWidth() - this.getWidth()), UInt(this.getWidth()), digitInit) 
+    digitCount.nameIt("Register_digitCount_LSDFMULT_" + scala.math.abs(rnd.nextInt()).toString, false)
     val x1 = Reg(init=UInt(0, width=this.getTotalWidth()))
     val x2 = Reg(init=UInt(0, width=b.getTotalWidth()))
-   
+    x1.nameIt("Register_x1_LSDFMULT_" + scala.math.abs(rnd.nextInt()).toString, false)
+    x2.nameIt("Register_x2_LSDFMULT_" + scala.math.abs(rnd.nextInt()).toString, false)
+
+
     val newX1fl = (this.toUInt << digitCount) | x1
     val newX1 = Mux(count === UInt(0), this.toUInt, newX1fl) 
     
