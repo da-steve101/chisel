@@ -544,4 +544,18 @@ class LSDFSuite extends TestSuite {
     
     launchCppTester((c: LSDFBundleReg) => new LSDFBundleRegTests(c))
   }
+
+  @Test def testLiteral {
+    class LSDFLiteralTest extends Module {
+      val io = new Bundle {
+        val a = LSDF(OUTPUT, width, digit)
+      }
+      io.a := LSDF(1112, width, digit)
+    }
+    class LSDFLiteralTestTests(c : LSDFLiteralTest) extends Tester(c) {
+      val x = BigInt(1112)
+      expect(c.io.a, x)
+    }
+    launchCppTester((c: LSDFLiteralTest) => new LSDFLiteralTestTests(c))
+  }
 }

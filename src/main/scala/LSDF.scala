@@ -34,19 +34,31 @@ import Node._
 import ChiselError._
 import java.io.PrintStream
 
+/** Factory methods for creating [[Chisel.LSDF LSDF]] */
 object LSDF {
 
   // Type Constructors
   //def apply[T <: Data](wire : T, digit : Int) : LSDF = apply(wire.dir, wire.getWidth, digit)
 
-  // Base Constructors
+  /** @param x Value to create a LSDF literal
+    * @param width The bitwidth of the LSDF
+    * @param digit The digit to use for LSDF, must be a power of 2
+    * @return A new LSDF literal */
   def apply(x : Int, width : Int, digit : Int) : LSDF = apply(BigInt(x), width, digit)
+  /** @param x Value to create a LSDF literal
+    * @param width The bitwidth of the LSDF
+    * @param digit The digit to use for LSDF, must be a power of 2
+    * @return A new LSDF literal*/
   def apply(x : BigInt, width : Int, digit : Int) : LSDF =  {
     val res = Lit(x, digit){LSDF()}
     res.totalWidth = width
     res
   }
 
+  /** Create a LSDF as an io pin
+    * @param dir Direction of I/O, either [[Chisel.INPUT$ INPUT]] or [[Chisel.OUTPUT$ OUTPUT]]
+    * @param width The bitwidth to use
+    * @param digit The digit to use for this LSDF object */
   def apply(dir : IODirection = null, width : Int = -1, digit : Int = 1) : LSDF = {
     val res = new LSDF(width);
     res.create(dir, digit)
@@ -55,6 +67,10 @@ object LSDF {
 
 }
 
+/** A Least Significant Digit First(LSDF) data type, see the factory methods in [[Chisel.LSDF$ LSDF]]
+  * @param totalWidth the bitwidth of the LSDF
+  * @param regDelay the number of delay elements in this LSDF instantiation
+  */
 class LSDF(var totalWidth : Int = 0, var regDelay : Int = 0) extends Bits with Num[LSDF] {
   type T = LSDF
 
