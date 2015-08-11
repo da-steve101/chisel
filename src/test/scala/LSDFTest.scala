@@ -545,6 +545,68 @@ class LSDFSuite extends TestSuite {
     launchCppTester((c: LSDFBundleReg) => new LSDFBundleRegTests(c))
   }
 
+  @Test def testGetDelay() {
+    class LSDFGetDelay extends Module {
+
+
+
+      def breadthFirst(visited : List[Node], end : Node) {
+        val startList : List[Node] = visited.last.inputs.toList
+        for (node <- startList) {
+          if (!visited.contains(node)) {
+            if (node._id == end._id) {
+              val completePath : List[Node] = visited :+ node
+              println("Completed Path Found: " + completePath.filter(_.isReg).length) 
+            }
+          }
+        }
+
+        for (node <- startList) {
+          if (!visited.contains(node) && !(node._id == end._id)) {
+            val nextPath = visited :+ node
+            breadthFirst(nextPath, end)
+          }
+        }
+      }
+
+
+      def getDelay(a : Node, b : Node) : Int = {
+        println("Finding Node Delay")
+        println("Node a ID: " + a._id + "\tNode b ID: " + b._id)
+        breadthFirst(List(a), b)
+        1
+      }
+
+      val io = new Bundle {
+        val a = LSDF(INPUT, width, digit)
+        val en = Bool(INPUT)
+        val res = LSDF(OUTPUT, width, digit)
+      }
+      val reg1 = Reg(next=io.a)
+      val reg2 = Reg(next=reg1)
+      val reg3 = Reg(next=Mux(io.en,reg2, reg1))
+      println(getDelay(reg1, io.a))
+      println(getDelay(reg2, io.a))
+      println(getDelay(reg2, reg1))
+      println(getDelay(reg1, reg2))
+      println(getDelay(reg3, io.a))
+      println(getDelay(io.a, reg3))
+      io.res := reg3
+    }
+
+
+    class LSDFGetDelayTests(c : LSDFGetDelay) extends Tester(c) {
+      val r = scala.util.Random
+      var prevResult = 1
+      var count = 0
+      for (i <- 0 until trials) {
+        val inA = BigInt(r.nextInt(1 << (width - 1)/2))
+      }
+    }
+    
+    launchCppTester((c: LSDFGetDelay) => new LSDFGetDelayTests(c))
+  }
+
   @Test def testLiteral {
     class LSDFLiteralTest extends Module {
       val io = new Bundle {
