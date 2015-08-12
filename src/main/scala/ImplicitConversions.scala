@@ -30,6 +30,7 @@
 
 package Chisel
 
+/** Provide some implicit conversions */
 object ImplicitConversions {
 
   implicit def intToUInt(x: Int): UInt = UInt(x)

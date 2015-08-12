@@ -190,8 +190,8 @@ class VerilogParameters {
 /** This class allows the connection to Verilog modules outside of chisel after generation
   * @example
   * {{{ class DSP48E1 extends BlackBox {
-  * val io = new [[Chisel.Bundle Bundle]] // Create I/O with same as DSP
-  * val dspParams = new [[Chisel.VerilogParameters VerilogParameters]] // Create Parameters to be specified
+  * val io = new Bundle // Create I/O with same as DSP
+  * val dspParams = new VerilogParameters // Create Parameters to be specified
   * setVerilogParams(dspParams)
   * renameClock("clk", "clock")
   * renameReset("rst")
@@ -203,7 +203,7 @@ abstract class BlackBox extends Module {
   private val clockMapping = new HashMap[String, String]
 
   /** Set the verilog parameters to be this string
-    * @param string this string must start with "#(" and end with ")" to generate valid verilog */
+    * @param string A String that must start with "#(" and end with ")" to generate valid verilog */
   def setVerilogParameters(string: String) {
     this.asInstanceOf[Module].verilog_parameters = string;
   }
@@ -211,7 +211,7 @@ abstract class BlackBox extends Module {
   /** Set the verilog parameters directly from a class [[Chisel.VerilogParameters VerilogParameters]]
     * @param params a object where all vals defined in the class are interpreted as verilog parameters */
   def setVerilogParameters(params: VerilogParameters) {
-    this.asInstanceOf[Module].verilog_parameters = params.toString
+    setVerilogParameters(params.toString)
   }
 
   /** Rename any clock with the output name of "clkName" to "outName"
