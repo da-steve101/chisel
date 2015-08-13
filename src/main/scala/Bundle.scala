@@ -129,7 +129,7 @@ class Bundle(val view: Seq[String] = Seq()) extends Aggregate {
     res
   }
 
-  /** Name the bundle, do not use directly, use [[Chisel.Node.setName setName]] instead */
+  /** Name the bundle, do not use directly, use [[Chisel.Nameable.setName setName]] instead */
   override def nameIt (path: String, isNamingIo: Boolean) {
     if( !named && (name.isEmpty || (!path.isEmpty && name != path)) ) {
       name = path
