@@ -30,7 +30,7 @@
 
 package Chisel
 
-class Insert(tgt: Bits, bit: UInt, length: Int) extends proc {
+class Insert(tgt: Bits, bit: UInt, length: Int) extends Proc {
   override def procAssign(src: Node): Unit = {
     tgt.nextOpt match {
       case None => ChiselError.error("Subword assignment requires a default value to have been assigned")

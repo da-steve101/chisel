@@ -147,7 +147,7 @@ class RegReset extends Reg {
   }
 }
 
-class Reg extends Delay with proc {
+class Reg extends Delay with Proc {
   override def toString: String = "REG(" + name + ")"
 
   override def forceMatchingWidths: Unit =

@@ -84,7 +84,7 @@ object Vec {
   def apply[T <: Data](n: Int, gen: => T): Vec[T] = fill(n)(gen)
 }
 
-class VecProc(enables: Iterable[Bool], elms: Iterable[Data]) extends proc {
+class VecProc(enables: Iterable[Bool], elms: Iterable[Data]) extends Proc {
   override def procAssign(src: Node): Unit = {
     for ((en, elm) <- enables zip elms) when (en) {
       elm.comp match {

@@ -52,7 +52,7 @@ object Bits {
 
 
 /** Base class for built-in Chisel types Bits and SInt. */
-abstract class Bits extends Data with proc {
+abstract class Bits extends Data with Proc {
   // TODO: make private or protected?
   var dir: IODirection = NODIR
 

@@ -207,7 +207,7 @@ class MemSeqRead(mem: Mem[_ <: Data], addri: Node) extends MemAccess(mem, addri)
   override def getPortType: String = "read"
 }
 
-class PutativeMemWrite(mem: Mem[_ <: Data], addri: UInt) extends Node with proc {
+class PutativeMemWrite(mem: Mem[_ <: Data], addri: UInt) extends Proc {
   override def procAssign(src: Node) =
     mem.doWrite(addri, Module.current.whenCond, src, None)
   // Chisel3 - this node contains data - used for verifying Wire() wrapping

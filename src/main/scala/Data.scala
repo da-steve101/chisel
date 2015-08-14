@@ -63,7 +63,7 @@ object Data {
   generates target code.
   */
 abstract class Data extends Node {
-  var comp: Option[proc] = None // TODO: better name?
+  var comp: Option[Proc] = None // TODO: better name?
 
   // Interface required by Vec:
   def ===[T <: Data](right: T): Bool = {

@@ -153,7 +153,7 @@ abstract class Backend extends FileSystemUtilities{
 
   def verifyAllMuxes {
     Driver.bfs { 
-      case p: proc => p.verifyMuxes
+      case p: Proc => p.verifyMuxes
       case _ =>
     } 
   }

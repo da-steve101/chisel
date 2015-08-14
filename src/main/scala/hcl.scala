@@ -89,7 +89,7 @@ object throwException {
 }
 
 
-trait proc extends Node {
+trait Proc extends Node {
   protected var procAssigned = false
 
   protected[Chisel] def verifyMuxes: Unit = {
