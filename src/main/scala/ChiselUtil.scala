@@ -763,7 +763,15 @@ object DelayBetween {
   }
 }
 
+/* Parameterised Ripple Carry Adder */
 object RippleCarryAdder {
+  
+  /** N-Bit Ripple Carry Adder
+    * @param a first input
+    * @param b second input
+    * @param cin carry input
+    * @return the addition of a+b and the carry out
+    */
   def apply(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = {
     val cout = Vec.fill(b.getWidth() + 1){UInt(width=1)}
     cout(0) := cin
@@ -777,13 +785,25 @@ object RippleCarryAdder {
   }
 }
 
+/* 1-Bit Full Adder */
 object FullAdder {
+
+  /** 1-Bit Full Adder
+    * @param a first input bit
+    * @param b second input bit
+    * @param cin carry input bit
+    * @return result and carry of the full adder
+    */
   def apply(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = ((a^b)^cin, (a&b)|(a&cin)|(b&cin))
 }
 
+/* PipelinedOperations for Add, Subtract and Multiply 
+ *  Each operation will be fully pipelined and compute one digit of the result every cycle.
+ *  The modules are designed to take an input every cycle and produce and output every cycle
+ */
 object PipelinedOperations {
-	def Adder(a : UInt, b : UInt, digit : Int) : UInt = Adder(a, b, digit, false)
-	def Adder(a : UInt, b : UInt, digit : Int, sub : Boolean) : UInt = {
+
+	private def Adder(a : UInt, b : UInt, digit : Int, sub : Boolean) : UInt = {
 		// If the Number of Digits is 0, just do a normal addition
 		if (digit == 0) (if (sub) return a-b else a+b)
 		val stages = a.getWidth()/digit
@@ -812,6 +832,20 @@ object PipelinedOperations {
 		Cat(lr, rRegs.last((stages - 1)*digit-1, 0))
 	}
 
+  /** Fully Pipelined Addition of a and b according to digit size
+    * @param a first input
+    * @param b second input
+    * @param digit size - Level of Pipelining
+    * @return a+b
+    */
+	def Adder(a : UInt, b : UInt, digit : Int) : UInt = Adder(a, b, digit, false)
+	
+  /** Fully Pipelined Subtraction of a and b according to digit size
+    * @param a first input
+    * @param b second input
+    * @param digit size - Level of Pipelining
+    * @return a-b
+    */
 	def Subtractor(a : UInt, b : UInt, digit : Int) = Adder(a, ~b, digit, true)
 
 }
