@@ -762,3 +762,56 @@ object DelayBetween {
     nodeShortestPathSearch(List(b), a)
   }
 }
+
+object RippleCarryAdder {
+  def apply(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = {
+    val cout = Vec.fill(b.getWidth() + 1){UInt(width=1)}
+    cout(0) := cin
+    val res = Vec.fill(b.getWidth()){UInt(width=1)}
+    for (i <- 0 until b.getWidth()) {
+      val (r, c) = FullAdder(a(i), b(i), cout(i))
+      res(i) := r
+      cout(i+1) := c
+    }
+    (res.toBits.toUInt, cout(b.getWidth()))
+  }
+}
+
+object FullAdder {
+  def apply(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = ((a^b)^cin, (a&b)|(a&cin)|(b&cin))
+}
+
+object PipelinedOperations {
+	def Adder(a : UInt, b : UInt, digit : Int) : UInt = Adder(a, b, digit, false)
+	def Adder(a : UInt, b : UInt, digit : Int, sub : Boolean) : UInt = {
+		// If the Number of Digits is 0, just do a normal addition
+		if (digit == 0) (if (sub) return a-b else a+b)
+		val stages = a.getWidth()/digit
+		val aRegs = Vec.fill(stages - 1){Reg(init=UInt(width=a.getWidth()))}
+		val bRegs = Vec.fill(stages - 1){Reg(init=UInt(width=b.getWidth()))}
+		val rRegs = Vec.fill(stages - 1){Reg(init=UInt(width=digit*(stages - 1)))}
+		val cRegs = Vec.fill(stages - 1){Reg(init=UInt(0, width=1))}
+
+		val initC = if(sub) UInt(1) else UInt(0)
+
+		val (r, c) = RippleCarryAdder(a(digit - 1, 0), b(digit - 1, 0), initC)
+		rRegs(0) := r
+		cRegs(0) := c
+		aRegs(0) := a >> UInt(digit)
+		bRegs(0) := b >> UInt(digit)
+
+		for (i <- 1 until stages - 1) {
+			val (r, c) = RippleCarryAdder(aRegs(i - 1)(digit - 1, 0), bRegs(i - 1)(digit - 1, 0), cRegs(i - 1))
+			rRegs(i) := Cat(r, rRegs(i-1)(digit*i - 1, 0))
+			cRegs(i) := c
+			aRegs(i) := aRegs(i - 1) >> UInt(digit)
+			bRegs(i) := bRegs(i - 1) >> UInt(digit)
+		}
+
+		val (lr, lc) = RippleCarryAdder(aRegs.last, bRegs.last, cRegs.last)
+		Cat(lr, rRegs.last((stages - 1)*digit-1, 0))
+	}
+
+	def Subtractor(a : UInt, b : UInt, digit : Int) = Adder(a, ~b, digit, true)
+
+}
