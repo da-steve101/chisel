@@ -43,8 +43,8 @@ class PipelinedOperationsSuite extends TestSuite {
   val r = scala.util.Random
   val trials = 10
 
- @Test def testPipelinedOperationAdder() {
-    class PipelinedAdder extends Module {
+ @Test def testPipelinedOperationAdderUInt() {
+    class PipelinedAdderUInt extends Module {
       val digit = 8
       val io = new Bundle {
         val a = UInt(INPUT, 16)
@@ -54,7 +54,7 @@ class PipelinedOperationsSuite extends TestSuite {
       io.c := PipelinedOperations.Adder(io.a, io.b, digit)
     }
 
-    class PipelinedAdderTests(c : PipelinedAdder) extends Tester(c) {
+    class PipelinedAdderUIntTests(c : PipelinedAdderUInt) extends Tester(c) {
       // Fill the Pipeline
       val res =  new scala.collection.mutable.Queue[BigInt]
       val stages = c.io.a.getWidth()/c.digit - 1
@@ -78,11 +78,91 @@ class PipelinedOperationsSuite extends TestSuite {
       }
     }
 
-    launchCppTester((c: PipelinedAdder) => new PipelinedAdderTests(c))
+    launchCppTester((c: PipelinedAdderUInt) => new PipelinedAdderUIntTests(c))
   }
 
-  @Test def testPipelinedOperationSubtractor() {
-    class PipelinedSubtractor extends Module {
+ @Test def testPipelinedOperationAdderSInt() {
+    class PipelinedAdderSInt extends Module {
+      val digit = 8
+      val io = new Bundle {
+        val a = SInt(INPUT, 16)
+        val b = SInt(INPUT, 16)
+        val c = SInt(OUTPUT, 16)
+      }
+      io.c := PipelinedOperations.Adder(io.a, io.b, digit)
+    }
+
+    class PipelinedAdderSIntTests(c : PipelinedAdderSInt) extends Tester(c) {
+      // Fill the Pipeline
+      val res =  new scala.collection.mutable.Queue[BigInt]
+      val stages = c.io.a.getWidth()/c.digit - 1
+      var start = 0
+      for (j <- 0 until stages) {
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA + inB)
+        step(1)
+      }
+      for (i <- 0 until trials) {
+        expect(c.io.c, res.dequeue())
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA + inB)
+        step(1)
+      }
+    }
+
+    launchCppTester((c: PipelinedAdderSInt) => new PipelinedAdderSIntTests(c))
+  }
+
+  def toFixedT(x : Double, fracWidth : Int) : BigInt = BigInt((x*scala.math.pow(2, fracWidth)).toInt)
+  def toFixed(x : Double, fracWidth : Int) : BigInt = BigInt(scala.math.round(x*scala.math.pow(2, fracWidth)))
+  def toDouble(x : BigInt, fracWidth : Int) : Double = x.toDouble/scala.math.pow(2, fracWidth)
+
+ @Test def testPipelinedOperationAdderFixed() {
+    class PipelinedAdderFixed extends Module {
+      val digit = 8
+      val io = new Bundle {
+        val a = Fixed(INPUT, 16, 4)
+        val b = Fixed(INPUT, 16, 4)
+        val c = Fixed(OUTPUT, 16, 4)
+      }
+      io.c := PipelinedOperations.Adder(io.a, io.b, digit)
+    }
+
+    class PipelinedAdderFixedTests(c : PipelinedAdderFixed) extends Tester(c) {
+      // Fill the Pipeline
+      val res =  new scala.collection.mutable.Queue[BigInt]
+      val stages = c.io.a.getWidth()/c.digit - 1
+      var start = 0
+      for (j <- 0 until stages) {
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(toFixed(toDouble(inA, 4) + toDouble(inB, 4), 4))
+        step(1)
+      }
+      for (i <- 0 until trials) {
+        expect(c.io.c, res.dequeue())
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA + inB)
+        step(1)
+      }
+    }
+
+    launchCppTester((c: PipelinedAdderFixed) => new PipelinedAdderFixedTests(c))
+  }
+
+  @Test def testPipelinedOperationSubtractorUInt() {
+    class PipelinedSubtractorUInt extends Module {
       val digit = 8
       val io = new Bundle {
         val a = UInt(INPUT, 16)
@@ -92,7 +172,7 @@ class PipelinedOperationsSuite extends TestSuite {
       io.c := PipelinedOperations.Subtractor(io.a, io.b, digit)
     }
 
-    class PipelinedSubtractorTests(c : PipelinedSubtractor) extends Tester(c) {
+    class PipelinedSubtractorUIntTests(c : PipelinedSubtractorUInt) extends Tester(c) {
       // Fill the Pipeline
       val res =  new scala.collection.mutable.Queue[BigInt]
       val stages = c.io.a.getWidth()/c.digit - 1
@@ -124,7 +204,90 @@ class PipelinedOperationsSuite extends TestSuite {
       }
     }
 
-    launchCppTester((c: PipelinedSubtractor) => new PipelinedSubtractorTests(c))
+    launchCppTester((c: PipelinedSubtractorUInt) => new PipelinedSubtractorUIntTests(c))
   } 
 
+  @Test def testPipelinedOperationSubtractorSInt() {
+    class PipelinedSubtractorSInt extends Module {
+      val digit = 8
+      val io = new Bundle {
+        val a = SInt(INPUT, 16)
+        val b = SInt(INPUT, 16)
+        val c = SInt(OUTPUT, 16)
+      }
+      io.c := PipelinedOperations.Subtractor(io.a, io.b, digit)
+    }
+
+    class PipelinedSubtractorSIntTests(c : PipelinedSubtractorSInt) extends Tester(c) {
+      // Fill the Pipeline
+      val res =  new scala.collection.mutable.Queue[BigInt]
+      val stages = c.io.a.getWidth()/c.digit - 1
+      var start = 0
+      for (j <- 0 until stages) {
+        var inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+        var inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA - inB)
+        step(1)
+      }
+      for (i <- 0 until trials) {
+        expect(c.io.c, res.dequeue())
+        var inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+        var inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        while (inB > inA) {
+          inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+          inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        }
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA - inB)
+        step(1)
+      }
+    }
+
+    launchCppTester((c: PipelinedSubtractorSInt) => new PipelinedSubtractorSIntTests(c))
+  } 
+
+  @Test def testPipelinedOperationSubtractorFixed() {
+    class PipelinedSubtractorFixed extends Module {
+      val digit = 8
+      val io = new Bundle {
+        val a = Fixed(INPUT, 16, 4)
+        val b = Fixed(INPUT, 16, 4)
+        val c = Fixed(OUTPUT, 16, 4)
+      }
+      io.c := PipelinedOperations.Subtractor(io.a, io.b, digit)
+    }
+
+    class PipelinedSubtractorFixedTests(c : PipelinedSubtractorFixed) extends Tester(c) {
+      // Fill the Pipeline
+      val res =  new scala.collection.mutable.Queue[BigInt]
+      val stages = c.io.a.getWidth()/c.digit - 1
+      var start = 0
+      for (j <- 0 until stages) {
+        var inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+        var inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(toFixed(toDouble(inA, 4) - toDouble(inB, 4), 4))
+        step(1)
+      }
+      for (i <- 0 until trials) {
+        expect(c.io.c, res.dequeue())
+        var inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+        var inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        while (inB > inA) {
+          inA = BigInt(r.nextInt(1 << c.io.a.getWidth() - 2))
+          inB = BigInt(r.nextInt(1 << c.io.b.getWidth() - 2))
+        }
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA - inB)
+        step(1)
+      }
+    }
+
+    launchCppTester((c: PipelinedSubtractorFixed) => new PipelinedSubtractorFixedTests(c))
+  } 
 }

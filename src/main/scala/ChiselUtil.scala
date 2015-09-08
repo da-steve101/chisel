@@ -772,10 +772,10 @@ object RippleCarryAdder {
     * @param cin carry input
     * @return the addition of a+b and the carry out
     */
-  def apply(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = {
-    val cout = Vec.fill(b.getWidth() + 1){UInt(width=1)}
+  def apply(a : Bits, b : Bits, cin : Bits) : (Bits, Bits) = {
+    val cout = Vec.fill(b.getWidth() + 1){Bits(width=1)}
     cout(0) := cin
-    val res = Vec.fill(b.getWidth()){UInt(width=1)}
+    val res = Vec.fill(b.getWidth()){Bits(width=1)}
     for (i <- 0 until b.getWidth()) {
       val (r, c) = FullAdder(a(i), b(i), cout(i))
       res(i) := r
@@ -794,7 +794,7 @@ object FullAdder {
     * @param cin carry input bit
     * @return result and carry of the full adder
     */
-  def apply(a : UInt, b : UInt, cin : UInt) : (UInt, UInt) = ((a^b)^cin, (a&b)|(a&cin)|(b&cin))
+  def apply(a : Bits, b : Bits, cin : Bits) : (Bits, Bits) = ((a^b)^cin, (a&b)|(a&cin)|(b&cin))
 }
 
 /* PipelinedOperations for Add, Subtract and Multiply 
@@ -803,33 +803,43 @@ object FullAdder {
  */
 object PipelinedOperations {
 
-	private def Adder(a : UInt, b : UInt, digit : Int, sub : Boolean) : UInt = {
+	private def Adder[T <: Bits with Num[T]](a : T, b : T, digit : Int, sub : Boolean) : T = {
 		// If the Number of Digits is 0, just do a normal addition
-		if (digit == 0) (if (sub) return a-b else a+b)
-		val stages = a.getWidth()/digit
-		val aRegs = Vec.fill(stages - 1){Reg(init=UInt(width=a.getWidth()))}
-		val bRegs = Vec.fill(stages - 1){Reg(init=UInt(width=b.getWidth()))}
-		val rRegs = Vec.fill(stages - 1){Reg(init=UInt(width=digit*(stages - 1)))}
-		val cRegs = Vec.fill(stages - 1){Reg(init=UInt(0, width=1))}
+		// if (digit == 0) (if (sub) return a-b else a+b)
 
-		val initC = if(sub) UInt(1) else UInt(0)
+		val stages = a.getWidth()/digit
+		val aRegs = Vec.fill(stages - 1){Reg(init=Bits(width=a.getWidth()))}
+		val bRegs = Vec.fill(stages - 1){Reg(init=Bits(width=b.getWidth()))}
+		val rRegs = Vec.fill(stages - 1){Reg(init=Bits(width=digit*(stages - 1)))}
+		val cRegs = Vec.fill(stages - 1){Reg(init=Bits(0, width=1))}
+
+		val initC = if(sub) Bits(1) else Bits(0)
 
 		val (r, c) = RippleCarryAdder(a(digit - 1, 0), b(digit - 1, 0), initC)
 		rRegs(0) := r
 		cRegs(0) := c
-		aRegs(0) := a >> UInt(digit)
-		bRegs(0) := b >> UInt(digit)
+		aRegs(0) := a.toBits >> digit
+		bRegs(0) := b.toBits >> digit
 
 		for (i <- 1 until stages - 1) {
 			val (r, c) = RippleCarryAdder(aRegs(i - 1)(digit - 1, 0), bRegs(i - 1)(digit - 1, 0), cRegs(i - 1))
 			rRegs(i) := Cat(r, rRegs(i-1)(digit*i - 1, 0))
 			cRegs(i) := c
-			aRegs(i) := aRegs(i - 1) >> UInt(digit)
-			bRegs(i) := bRegs(i - 1) >> UInt(digit)
+			aRegs(i) := aRegs(i - 1) >> digit
+			bRegs(i) := bRegs(i - 1) >> digit
 		}
 
 		val (lr, lc) = RippleCarryAdder(aRegs.last, bRegs.last, cRegs.last)
-		Cat(lr, rRegs.last((stages - 1)*digit-1, 0))
+		val res = a match {
+			case u : Fixed => {
+				val t = chiselCast(Cat(lr, rRegs.last((stages - 1)*digit-1, 0))){Fixed()}
+				t.width = u.getWidth()
+				t.fractionalWidth = u.getFractionalWidth()
+				t
+			}
+			case _ => Cat(lr, rRegs.last((stages - 1)*digit-1, 0))
+			}
+		res.asInstanceOf[T]
 	}
 
   /** Fully Pipelined Addition of a and b according to digit size
@@ -838,7 +848,7 @@ object PipelinedOperations {
     * @param digit size - Level of Pipelining
     * @return a+b
     */
-	def Adder(a : UInt, b : UInt, digit : Int) : UInt = Adder(a, b, digit, false)
+	def Adder[T <: Bits with Num[T]](a : T, b : T, digit : Int) : T = Adder(a, b, digit, false)
 	
   /** Fully Pipelined Subtraction of a and b according to digit size
     * @param a first input
@@ -846,6 +856,6 @@ object PipelinedOperations {
     * @param digit size - Level of Pipelining
     * @return a-b
     */
-	def Subtractor(a : UInt, b : UInt, digit : Int) = Adder(a, ~b, digit, true)
+	def Subtractor[T <: Bits with Num[T]](a : T, b : T, digit : Int) : T = Adder(a, ~b, digit, true)
 
 }
