@@ -803,59 +803,72 @@ object FullAdder {
  */
 object PipelinedOperations {
 
-	private def Adder[T <: Bits with Num[T]](a : T, b : T, digit : Int, sub : Boolean) : T = {
-		// If the Number of Digits is 0, just do a normal addition
-		// if (digit == 0) (if (sub) return a-b else a+b)
+  private def Adder[T <: Bits with Num[T]](a : T, b : T, digit : Int, sub : Boolean) : T = {
 
-		val stages = a.getWidth()/digit
-		val aRegs = Vec.fill(stages - 1){Reg(init=Bits(width=a.getWidth()))}
-		val bRegs = Vec.fill(stages - 1){Reg(init=Bits(width=b.getWidth()))}
-		val rRegs = Vec.fill(stages - 1){Reg(init=Bits(width=digit*(stages - 1)))}
-		val cRegs = Vec.fill(stages - 1){Reg(init=Bits(0, width=1))}
+    val stages = a.getWidth/digit
+    val aRegs = Vec.fill(stages){Reg(init=Bits(width=a.getWidth))}
+    val bRegs = Vec.fill(stages){Reg(init=Bits(width=a.getWidth))}
+    val rRegs = Vec.fill(stages){Reg(init=Bits(width=digit*stages))}
+    val cRegs = Vec.fill(stages){Reg(init=Bits(0, width=1))}
 
-		val initC = if(sub) Bits(1) else Bits(0)
+    val initC = if(sub) Bits(1) else Bits(0)
 
-		val (r, c) = RippleCarryAdder(a(digit - 1, 0), b(digit - 1, 0), initC)
-		rRegs(0) := r
-		cRegs(0) := c
-		aRegs(0) := a.toBits >> digit
-		bRegs(0) := b.toBits >> digit
+    val (r, c) = RippleCarryAdder(a(digit - 1, 0), b(digit - 1, 0), initC)
+    rRegs(0) := r
+    cRegs(0) := c
+    aRegs(0) := a.toBits >> digit
+    bRegs(0) := b.toBits >> digit
 
-		for (i <- 1 until stages - 1) {
-			val (r, c) = RippleCarryAdder(aRegs(i - 1)(digit - 1, 0), bRegs(i - 1)(digit - 1, 0), cRegs(i - 1))
-			rRegs(i) := Cat(r, rRegs(i-1)(digit*i - 1, 0))
-			cRegs(i) := c
-			aRegs(i) := aRegs(i - 1) >> digit
-			bRegs(i) := bRegs(i - 1) >> digit
-		}
+    for (i <- 1 until stages) {
+      val (r, c) = RippleCarryAdder(aRegs(i - 1)(digit - 1, 0), bRegs(i - 1)(digit - 1, 0), cRegs(i - 1))
+      rRegs(i) := Cat(r, rRegs(i-1)(digit*i - 1, 0))
+      cRegs(i) := c
+      aRegs(i) := aRegs(i - 1) >> digit
+      bRegs(i) := bRegs(i - 1) >> digit
+    }
 
-		val (lr, lc) = RippleCarryAdder(aRegs.last, bRegs.last, cRegs.last)
-		val res = a match {
-			case u : Fixed => {
-				val t = chiselCast(Cat(lr, rRegs.last((stages - 1)*digit-1, 0))){Fixed()}
-				t.width = u.getWidth()
-				t.fractionalWidth = u.getFractionalWidth()
-				t
-			}
-			case _ => Cat(lr, rRegs.last((stages - 1)*digit-1, 0))
-			}
-		res.asInstanceOf[T]
-	}
+    val (lr, lc) = RippleCarryAdder(aRegs.last, bRegs.last, cRegs.last)
+    val res = a match {
+      case u : Fixed => {
+	val t = chiselCast(Cat(lr, rRegs.last( stages*digit - 1, 0))){Fixed()}
+	t.width = u.getWidth()
+	t.fractionalWidth = u.getFractionalWidth()
+	t
+      }
+      case _ => Cat(lr, rRegs.last( stages*digit - 1, 0))
+    }
+    res.asInstanceOf[T]
+  }
 
-  /** Fully Pipelined Addition of a and b according to digit size
+  /** Fully Pipelined Addition of a and b according to number of stages
     * @param a first input
     * @param b second input
-    * @param digit size - Level of Pipelining
+    * @param stages number of stages to split the computation over
     * @return a+b
     */
-	def Adder[T <: Bits with Num[T]](a : T, b : T, digit : Int) : T = Adder(a, b, digit, false)
-	
+  def plAdder[T <: Bits with Num[T]](a : T, b : T, stages : Int) : T = {
+    if ( stages < 0 ) { ChiselError.error("Cannot have a negitive number of stages in pipelined adder") }
+    Predef.assert( a.getWidth == b.getWidth, "Widths must be the same for pipelined adder")
+    if ( stages == 0 ) { a + b }
+    else if ( stages < a.getWidth ) {
+      val digit = scala.math.ceil(a.getWidth/stages.toDouble).toInt
+      if ( stages - (a.getWidth/digit) > 0 ) {
+        ChiselError.warning("Using digit = " + digit + " as not enough stages smaller digit so will add filler registers at the end")
+      }
+      ShiftRegister(Adder(a, b, digit, false), stages - (a.getWidth/digit))
+    }
+    else {
+      ChiselError.warning("More stages than bits in pipelined adder, will add filler registers at the end")
+      ShiftRegister(Adder(a, b, 1, false), stages - a.getWidth)
+    }
+  }
+
   /** Fully Pipelined Subtraction of a and b according to digit size
     * @param a first input
     * @param b second input
-    * @param digit size - Level of Pipelining
+    * @param stages number of stages to split the computation over
     * @return a-b
     */
-	def Subtractor[T <: Bits with Num[T]](a : T, b : T, digit : Int) : T = Adder(a, ~b, digit, true)
+  def plSubtractor[T <: Bits with Num[T]](a : T, b : T, stages : Int) : T = plAdder(a, -b, stages)
 
 }
