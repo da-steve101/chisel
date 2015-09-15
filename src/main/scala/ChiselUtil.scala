@@ -805,9 +805,9 @@ object PipelinedOperations {
 
   private def Adder[T <: Bits with Num[T]](a : T, b : T, digit : Int, sub : Boolean) : T = {
 
-    val stages = a.getWidth/digit
-    val aRegs = Vec.fill(stages){Reg(init=Bits(width=a.getWidth))}
-    val bRegs = Vec.fill(stages){Reg(init=Bits(width=a.getWidth))}
+    val stages = a.getWidth()/digit
+    val aRegs = Vec.fill(stages){Reg(init=Bits(width=a.getWidth()))}
+    val bRegs = Vec.fill(stages){Reg(init=Bits(width=a.getWidth()))}
     val rRegs = Vec.fill(stages){Reg(init=Bits(width=digit*stages))}
     val cRegs = Vec.fill(stages){Reg(init=Bits(0, width=1))}
 
@@ -830,14 +830,113 @@ object PipelinedOperations {
     val (lr, lc) = RippleCarryAdder(aRegs.last, bRegs.last, cRegs.last)
     val res = a match {
       case u : Fixed => {
-	val t = chiselCast(Cat(lr, rRegs.last( stages*digit - 1, 0))){Fixed()}
-	t.width = u.getWidth()
-	t.fractionalWidth = u.getFractionalWidth()
-	t
+      	val t = chiselCast(Cat(lr, rRegs.last( stages*digit - 1, 0))){Fixed()}
+      	t.width = u.getWidth()
+      	t.fractionalWidth = u.getFractionalWidth()
+      	t
       }
       case _ => Cat(lr, rRegs.last( stages*digit - 1, 0))
     }
     res.asInstanceOf[T]
+  }
+
+  private def Multiplier[T <: Bits with Num[T]](a : T, b : T, digit : Int) : T = {
+    val stages = a.getWidth()*2/digit
+    // Result
+    val aRegs = Vec.fill(stages){Reg(init=Bits(width=a.getWidth()*2))}
+    val bRegs = Vec.fill(stages){Reg(init=Bits(width=b.getWidth()*2))}
+    val rRegs = Vec.fill(stages){Reg(init=Bits(width=a.getWidth()*2))}
+    val cRegs = Vec.fill(stages){Vec.fill(digit*stages){Reg(init=UInt(0, width=1))}}
+
+    val theResult = Bits(width=a.getWidth()*2)
+
+    for (i <- 0 until stages) {
+      // Transfer Values between Stages
+      val inA = UInt(width=a.getWidth()*2)
+      val inB = UInt(width=b.getWidth()*2)
+      if (i == 0) inA := a else inA := aRegs(i - 1)
+      if (i == 0) inB := b else inB := bRegs(i - 1)
+      aRegs(i) := inA
+      bRegs(i) := inB
+
+      // Calculate the Multiplication
+      val aAndBT = Vec.fill(a.getWidth()*2){Vec.fill(digit*stages){UInt(width=1)}}
+
+      // Need to Create aAndB
+      for (k <- 0 until digit*stages) {
+        val newA = Fill(inA(k), a.getWidth()*2)
+        val newAB = inB & newA
+        for (j <- 0 until a.getWidth()*2 - k) {
+          aAndBT(j + k)(k) := newAB(j)
+        }
+      }
+
+      val aAndB = Vec.fill(digit){Vec.fill(digit*stages){UInt(width=1)}}
+
+      for (j <- 0 until digit) {
+        for (k <- 0 until digit*stages) {
+          aAndB(j)(k) := aAndBT(j + (i*digit))(k)
+        }
+      }
+
+      val inC = if (i == 0) Vec.fill(digit*stages){UInt(0, width = 1)} else cRegs(i - 1)
+      // Main Bulk of the work
+      val result = new ArrayBuffer[UInt]
+      val carry = Vec.fill(digit + 1){Vec.fill(digit*stages){UInt(width=1)}}
+      for (j <- 0 until digit*stages) {
+        carry(0)(j) := inC(j)
+      }
+      for (j <- 0 until digit) {
+       val res = Vec.fill(digit*stages + 1){UInt(width=1)}
+       for (k <- 0 until digit*stages) {
+        val (r, c) = FullAdder(aAndB(j)(k), res(k), carry(j)(k))
+        res(k+1) := r
+        carry(j+1)(k) := c
+       }
+       result.append(res(digit*stages)) 
+      }
+      for (j <- 0 until digit*stages) {
+        cRegs(i)(j) := carry(digit)(j)
+      }
+      if (i == 0) {
+        rRegs(i) := Vec(result).toBits
+      } else {
+        rRegs(i) := Cat(Vec(result).toBits, rRegs(i - 1)(i*digit - 1, 0))
+      }
+      if (stages == 1) {
+        theResult := Vec(result).toBits
+      }
+    }
+    if (stages != 1) {
+      theResult := rRegs.last
+    }
+    val res = a match {
+      case u : Fixed => {
+        val t = chiselCast(theResult){Fixed()}
+        t.width = u.getWidth()*2
+        t.fractionalWidth = u.getFractionalWidth()*2
+        t
+      }
+      case _ => theResult
+    }
+    res.asInstanceOf[T]
+  }
+
+  def plMultiplier[T <: Bits with Num[T]](a : T, b : T, stages : Int) : T = { 
+    if ( stages < 0 ) { ChiselError.error("Cannot have a negitive number of stages in pipelined multiplier") }
+    Predef.assert( a.getWidth == b.getWidth, "Widths must be the same for pipelined multiplier")
+    if ( stages == 0 ) { a * b }
+    else if ( stages < a.getWidth()*2 ) {
+      val digit = scala.math.ceil(a.getWidth()*2/stages.toDouble).toInt
+      if ( stages - (a.getWidth()*2/digit) > 0 ) {
+        ChiselError.warning("Using digit = " + digit + " as not enough stages smaller digit so will add filler registers at the end")
+      }
+      ShiftRegister(Multiplier(a, b, digit), stages - (a.getWidth()*2/digit))
+    }
+    else {
+      ChiselError.warning("More stages than bits in pipelined multiplier, will add filler registers at the end")
+      ShiftRegister(Multiplier(a, b, 1), stages - a.getWidth()*2)
+    }
   }
 
   /** Fully Pipelined Addition of a and b according to number of stages
@@ -869,6 +968,20 @@ object PipelinedOperations {
     * @param stages number of stages to split the computation over
     * @return a-b
     */
-  def plSubtractor[T <: Bits with Num[T]](a : T, b : T, stages : Int) : T = plAdder(a, -b, stages)
-
+  def plSubtractor[T <: Bits with Num[T]](a : T, b : T, stages : Int) : T = {
+    if ( stages < 0 ) { ChiselError.error("Cannot have a negitive number of stages in pipelined subtractor") }
+    Predef.assert( a.getWidth == b.getWidth, "Widths must be the same for pipelined subtractor")
+    if ( stages == 0 ) { a - b }
+    else if ( stages < a.getWidth ) {
+      val digit = scala.math.ceil(a.getWidth/stages.toDouble).toInt
+      if ( stages - (a.getWidth/digit) > 0 ) {
+        ChiselError.warning("Using digit = " + digit + " as not enough stages smaller digit so will add filler registers at the end")
+      }
+      ShiftRegister(Adder(a, ~b, digit, true), stages - (a.getWidth/digit))
+    }
+    else {
+      ChiselError.warning("More stages than bits in pipelined subtractor, will add filler registers at the end")
+      ShiftRegister(Adder(a, ~b, 1, true), stages - a.getWidth)
+    }
+  }
 }

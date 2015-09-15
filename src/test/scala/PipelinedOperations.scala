@@ -350,4 +350,149 @@ class PipelinedOperationsSuite extends TestSuite {
         () => Module(new PipelinedSubtractorFixed(stages))) {m => new PipelinedSubtractorFixedTests(m)}
     }
   }
+
+
+ @Test def testPipelinedOperationMultiplierUInt() {
+    class PipelinedMultiplierUInt(val stages : Int) extends Module {
+      val io = new Bundle {
+        val a = UInt(INPUT, bitWidth)
+        val b = UInt(INPUT, bitWidth)
+        val c = UInt(OUTPUT, bitWidth*2)
+      }
+      io.c := plMultiplier(io.a, io.b, stages)
+    }
+
+    class PipelinedMultiplierUIntTests(c : PipelinedMultiplierUInt) extends Tester(c) {
+      // Fill the Pipeline
+      val res =  new scala.collection.mutable.Queue[BigInt]
+      var start = 0
+      for (j <- 0 until c.stages) {
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA * inB)
+        step(1)
+      }
+      if ( c.stages == 0 ) {
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA * inB)
+      }
+      for (i <- 0 until trials) {
+        expect(c.io.c, res.dequeue())
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA * inB)
+        step(1)
+      }
+    }
+
+   for ( stages <- 0 until maxStages ) {
+     println("stages = " + stages )
+     chiselMainTest(Array[String]("--backend", "c",
+       "--targetDir", dir.getPath.toString(), "--genHarness", "--compile", "--test"),
+       () => Module(new PipelinedMultiplierUInt(stages))) {m => new PipelinedMultiplierUIntTests(m)}
+   }
+  }
+
+ @Test def testPipelinedOperationMultiplierSInt() {
+    class PipelinedMultiplierSInt(val stages : Int) extends Module {
+      val io = new Bundle {
+        val a = SInt(INPUT, bitWidth)
+        val b = SInt(INPUT, bitWidth)
+        val c = SInt(OUTPUT, bitWidth*2)
+      }
+      io.c := plMultiplier(io.a, io.b, stages)
+    }
+
+    class PipelinedMultiplierSIntTests(c : PipelinedMultiplierSInt) extends Tester(c) {
+      // Fill the Pipeline
+      val res =  new scala.collection.mutable.Queue[BigInt]
+      var start = 0
+      for (j <- 0 until c.stages) {
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA * inB)
+        step(1)
+      }
+      if ( c.stages == 0 ) {
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA * inB)
+      }
+      for (i <- 0 until trials) {
+        expect(c.io.c, res.dequeue())
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(inA * inB)
+        step(1)
+      }
+    }
+
+   for ( stages <- 0 until maxStages ) {
+     println("stages = " + stages )
+     chiselMainTest(Array[String]("--backend", "c",
+       "--targetDir", dir.getPath.toString(), "--genHarness", "--compile", "--test"),
+       () => Module(new PipelinedMultiplierSInt(stages))) {m => new PipelinedMultiplierSIntTests(m)}
+   }
+  }
+
+ @Test def testPipelinedOperationMultiplierFixed() {
+    class PipelinedMultiplierFixed( val stages : Int ) extends Module {
+      val io = new Bundle {
+        val a = Fixed(INPUT, bitWidth, fracWidth)
+        val b = Fixed(INPUT, bitWidth, fracWidth)
+        val c = Fixed(OUTPUT, bitWidth*2, fracWidth*2)
+      }
+      io.c := plMultiplier(io.a, io.b, stages)
+    }
+
+    class PipelinedMultiplierFixedTests(c : PipelinedMultiplierFixed) extends Tester(c) {
+      // Fill the Pipeline
+      val res =  new scala.collection.mutable.Queue[BigInt]
+      var start = 0
+      for (j <- 0 until c.stages) {
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(toFixed(toDouble(inA, fracWidth) * toDouble(inB, fracWidth), fracWidth*2))
+        step(1)
+      }
+      if ( c.stages == 0 ) {
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(toFixed(toDouble(inA, fracWidth) * toDouble(inB, fracWidth), fracWidth*2))
+      }
+      for (i <- 0 until trials) {
+        expect(c.io.c, res.dequeue())
+        val inA = BigInt(r.nextInt(1 << c.io.a.getWidth()/2 - 2))
+        val inB = BigInt(r.nextInt(1 << c.io.b.getWidth()/2 - 2))
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        res.enqueue(toFixed(toDouble(inA, fracWidth) * toDouble(inB, fracWidth), fracWidth*2))
+        step(1)
+      }
+    }
+
+   for ( stages <- 0 until maxStages ) {
+     println("stages = " + stages )
+     chiselMainTest(Array[String]("--backend", "c",
+       "--targetDir", dir.getPath.toString(), "--genHarness", "--compile", "--test"),
+       () => Module(new PipelinedMultiplierFixed(stages))) {m => new PipelinedMultiplierFixedTests(m)}
+   }
+  }
 }
