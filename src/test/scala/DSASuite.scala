@@ -679,7 +679,6 @@ class DSASuite extends TestSuite {
    *   end for
    */
   object MSDFMul {
-
     def apply(a : UInt, b : UInt, start : Bool) : UInt = {
       val caA = Reg(init=UInt(0, width=14))
       val ws = Reg(init=UInt(0, width=14))
@@ -746,6 +745,44 @@ class DSASuite extends TestSuite {
         (a === UInt("b111")) -> UInt("b00")
         ))
     }
+  }
+
+  object MSDFLiteral {
+    def apply(a : UInt, initialIndex : Int = 0) : UInt = {
+      val literalWidth = a.getWidth()/2
+      val litArray = new ArrayBuffer[UInt]
+      for (i <- a.getWidth() - 1 to 1 by -2) {
+        val reg = Reg(init=a(i, i - 1))
+        litArray.append(reg)
+      }
+      val litRegs = Vec(litArray)
+      for (i <- 0 until litRegs.length - 1) {
+        litRegs(i) := litRegs(i + 1)
+      }
+      litRegs(litRegs.length - 1) := litRegs(0)
+      litRegs(initialIndex)
+    }
+  }
+
+  object MSDFRegister {
+
+    val litArray = 
+
+    def apply(a : UInt, initialIndex : Int = 0) : UInt = {
+      val literalWidth = a.getWidth()/2
+      for (i <- a.getWidth() - 1 to 1 by -2) {
+        val reg = Reg(init=a(i, i - 1))
+        litArray.append(reg)
+      }
+      val litRegs = Vec(litArray)
+      for (i <- 0 until litRegs.length - 1) {
+        litRegs(i) := litRegs(i + 1)
+      }
+      litRegs(litRegs.length - 1) := litRegs(0)
+      litRegs(initialIndex)
+    }
+
+    def update(a : UInt)
   }
 
   object SDOnlineConversion {
@@ -1287,14 +1324,14 @@ class DSASuite extends TestSuite {
   @Test def testMSDFDotProduct() {
     class MSDFDotProductTest extends Module {
       val io = new Bundle {
-        val a = Vec.fill(4){UInt(INPUT, 2)}
-        val b = Vec.fill(4){UInt(INPUT, 2)}
+        val a = Vec.fill(2){UInt(INPUT, 2)}
+        val b = Vec.fill(2){UInt(INPUT, 2)}
         val start = Bool(INPUT)
         val c = UInt(OUTPUT, 2)
       }
 
       val threeDelay = ShiftRegister(io.start, 3)
-      val dotProduct = (a, b).zipped.map((ai, bi) => MSDFMul(ai, bi, start)).reduce((r, c) => MSDFAdd(r, c, threeDelay))
+      val dotProduct = (io.a, io.b).zipped.map((ai, bi) => MSDFMul(ai, bi, io.start)).reduce((r, c) => MSDFAdd(r, c, threeDelay))
 
       io.c := dotProduct
     }
@@ -1302,32 +1339,72 @@ class DSASuite extends TestSuite {
     class MSDFDotProductTests(c : MSDFDotProductTest) extends Tester(c) {
 
       for (i <- 0 until trials) {
-        val dA = List.fill(4){r.nextDouble()/2}
-        val dB = List.fill(4){r.nextDouble()/2}
+        val dA = List.fill(2){r.nextDouble()/2}
+        val dB = List.fill(2){r.nextDouble()/2}
         val a = dA.map(in => doubleToSigned(in, 8))
         val b = dB.map(in => doubleToSigned(in, 8))
         val res = new ArrayBuffer[Int]
-        for (j <- 0 until a.length + 3) {
-          for (k <- 0 until 4) {
-            val inA = if(j < a.length) a(k)(j) else 0
-            val inB = if(j < b.length) b(k)(j) else 0
+        for (j <- 0 until a(0).length + 5) {
+          for (k <- 0 until 2) {
+            val inA = if(j < a(k).length) a(k)(j) else 0
+            val inB = if(j < b(k).length) b(k)(j) else 0
             poke(c.io.a(k), toSignedDigit(inA))
             poke(c.io.b(k), toSignedDigit(inB))
           }
           val start = if (j == 0) BigInt(1) else BigInt(0)
           poke(c.io.start, start)
           peek(c.io.c)
-          if (j >= 3)
+          if (j >= 5)
             res.append(fromSignedDigit(peek(c.io.c).toInt))
           step(1)
         }
-        val expectedRes = 
+        val expectedRes = (dA, dB).zipped.map(_*_).reduce(_+_)
         val dRes = signedToDouble(res.toList)
         val err = scala.math.abs(expectedRes - dRes)
         val correct = if (err > scala.math.pow(2, -8)) false else true
-        expect(correct, "Expected: " + expectedRes.toString + "(" + (dA*dB).toString + ")" + "\tGot: " + dRes.toString + "\tError: " + err.toString)
+        expect(correct, "Expected: " + expectedRes.toString + "\tGot: " + dRes.toString + "\tError: " + err.toString)
       }
     }
     launchCppTester((c : MSDFDotProductTest) => new MSDFDotProductTests(c))
+  }
+
+  @Test def testMSDFLiteral() {
+    class MSDFLiteralTest extends Module {
+      val io = new Bundle {
+        val c = UInt(OUTPUT, 2)
+      }
+      io.c := MSDFLiteral(UInt("b10011001"))
+    }
+
+    class MSDFLiteralTests(c : MSDFLiteralTest) extends Tester(c) {
+      for (i <- 0 until trials) {
+        val res = List(2, 1, 2, 1)
+        for (j <- 0 until 4) {
+          expect(c.io.c, res(j))
+          step(1)
+        }
+      }
+    }
+    launchCppTester((c : MSDFLiteralTest) => new MSDFLiteralTests(c))
+  }
+
+  @Test def testMSDFLiteralInitial() {
+    class MSDFLiteralInitialTest extends Module {
+      val io = new Bundle {
+        val c = UInt(OUTPUT, 2)
+      }
+      io.c := MSDFLiteral(UInt("b10011001"), 1)
+    }
+
+    class MSDFLiteralInitialTests(c : MSDFLiteralInitialTest) extends Tester(c) {
+      for (i <- 0 until trials) {
+        val res = List(1, 2, 1, 2)
+        for (j <- 0 until 4) {
+          expect(c.io.c, res(j))
+          step(1)
+        }
+      }
+    }
+    launchCppTester((c : MSDFLiteralInitialTest) => new MSDFLiteralInitialTests(c))
   }
 }
