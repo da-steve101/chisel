@@ -91,148 +91,6 @@ class DSASuite extends TestSuite {
   val trials = 10
   val r = scala.util.Random
 
-  /* Pipelined Adder and Subtractor Implementations */
-  
-  // object FullWidthDigitAdder {
-  //   def apply(a : UInt, b : UInt, digit : Int) : UInt = {
-  //     val stages = a.getWidth()/digit
-  //     val aRegs = Vec.fill(stages - 1){Reg(init=UInt(width=a.getWidth()))}
-  //     val bRegs = Vec.fill(stages - 1){Reg(init=UInt(width=b.getWidth()))}
-  //     val rRegs = Vec.fill(stages - 1){Reg(init=UInt(width=digit*(stages - 1)))}
-  //     val cRegs = Vec.fill(stages - 1){Reg(init=UInt(0, width=1))}
-      
-  //     val (r, c) = RippleCarryAdder(a(digit - 1, 0), b(digit - 1, 0), UInt(0))
-  //     rRegs(0) := r
-  //     cRegs(0) := c
-  //     aRegs(0) := a >> UInt(digit)
-  //     bRegs(0) := b >> UInt(digit)
-
-  //     for (i <- 1 until stages - 1) {
-  //       val (r, c) = RippleCarryAdder(aRegs(i - 1)(digit - 1, 0), bRegs(i - 1)(digit - 1, 0), cRegs(i - 1))
-  //       rRegs(i) := Cat(r, rRegs(i-1)(digit*i - 1, 0))
-  //       cRegs(i) := c
-  //       aRegs(i) := aRegs(i - 1) >> UInt(digit)
-  //       bRegs(i) := bRegs(i - 1) >> UInt(digit)
-  //     }
-
-  //     val (lr, lc) = RippleCarryAdder(aRegs.last, bRegs.last, cRegs.last)
-  //     Cat(lr, rRegs.last((stages - 1)*digit-1, 0))
-  //   }
-  // }
-
-  // object FullWidthDigitSubtractor {
-  //   def apply(a : UInt, b : UInt, digit : Int) : UInt = {
-  //     val stages = a.getWidth()/digit
-  //     val aRegs = Vec.fill(stages - 1){Reg(init=UInt(width=a.getWidth()))}
-  //     val bRegs = Vec.fill(stages - 1){Reg(init=UInt(width=b.getWidth()))}
-  //     val rRegs = Vec.fill(stages - 1){Reg(init=UInt(width=digit*(stages - 1)))}
-  //     val cRegs = Vec.fill(stages - 1){Reg(init=UInt(0, width=1))}
-      
-  //     val (r, c) = RippleCarryAdder(a(digit - 1, 0), ~b(digit - 1, 0), UInt(1))
-  //     rRegs(0) := r
-  //     cRegs(0) := c
-  //     aRegs(0) := a >> UInt(digit)
-  //     bRegs(0) := b >> UInt(digit)
-
-  //     for (i <- 1 until stages - 1) {
-  //       val (r, c) = RippleCarryAdder(aRegs(i - 1)(digit - 1, 0), ~bRegs(i - 1)(digit - 1, 0), cRegs(i - 1))
-  //       rRegs(i) := Cat(r, rRegs(i-1)(digit*i - 1, 0))
-  //       cRegs(i) := c
-  //       aRegs(i) := aRegs(i - 1) >> UInt(digit)
-  //       bRegs(i) := bRegs(i - 1) >> UInt(digit)
-  //     }
-
-  //     val (lr, lc) = RippleCarryAdder(aRegs.last, ~bRegs.last, cRegs.last)
-  //     Cat(lr, rRegs.last((stages - 1)*digit-1, 0))
-  //   }
-  // } 
-
-  // @Test def testFullWidthDigitAdder() {
-  //   class DigitAdder extends Module {
-  //     val digit = 8
-  //     val io = new Bundle {
-  //       val a = UInt(INPUT, 16)
-  //       val b = UInt(INPUT, 16)
-  //       val c = UInt(OUTPUT, 16)
-  //     }
-  //     io.c := FullWidthDigitAdder(io.a, io.b, digit)
-  //   }
-
-  //   class DigitAdderTests(c : DigitAdder) extends Tester(c) {
-
-  //     // Fill the Pipeline
-  //     val res =  new scala.collection.mutable.Queue[BigInt]
-  //     val stages = c.io.a.getWidth()/c.digit - 1
-  //     var start = 0
-  //     for (j <- 0 until stages) {
-  //       val inA = BigInt(r.nextInt(1 << 14))
-  //       val inB = BigInt(r.nextInt(1 << 14))
-  //       poke(c.io.a, inA)
-  //       poke(c.io.b, inB)
-  //       res.enqueue(inA + inB)
-  //       step(1)
-  //     }
-  //     for (i <- 0 until trials) {
-  //       expect(c.io.c, res.dequeue())
-  //       val inA = BigInt(r.nextInt(1 << 14))
-  //       val inB = BigInt(r.nextInt(1 << 14))
-  //       poke(c.io.a, inA)
-  //       poke(c.io.b, inB)
-  //       res.enqueue(inA + inB)
-  //       step(1)
-  //     }
-  //   }
-
-  //   launchCppTester((c: DigitAdder) => new DigitAdderTests(c))
-  // }
-
-  // @Test def testFullWidthDigitSubtractor() {
-  //   class DigitSubtractor extends Module {
-  //     val digit = 8
-  //     val io = new Bundle {
-  //       val a = UInt(INPUT, 16)
-  //       val b = UInt(INPUT, 16)
-  //       val c = UInt(OUTPUT, 16)
-  //     }
-  //     io.c := FullWidthDigitSubtractor(io.a, io.b, digit)
-  //   }
-
-  //   class DigitSubtractorTests(c : DigitSubtractor) extends Tester(c) {
-
-  //     // Fill the Pipeline
-  //     val res =  new scala.collection.mutable.Queue[BigInt]
-  //     val stages = c.io.a.getWidth()/c.digit - 1
-  //     var start = 0
-  //     for (j <- 0 until stages) {
-  //       var inA = BigInt(r.nextInt(1 << totalWidth - 2))
-  //       var inB = BigInt(r.nextInt(1 << totalWidth - 2))
-  //       while (inB > inA) {
-  //         inA = BigInt(r.nextInt(1 << totalWidth - 2))
-  //         inB = BigInt(r.nextInt(1 << totalWidth - 2))
-  //       }
-  //       poke(c.io.a, inA)
-  //       poke(c.io.b, inB)
-  //       res.enqueue(inA - inB)
-  //       step(1)
-  //     }
-  //     for (i <- 0 until trials) {
-  //       expect(c.io.c, res.dequeue())
-  //       var inA = BigInt(r.nextInt(1 << totalWidth - 2))
-  //       var inB = BigInt(r.nextInt(1 << totalWidth - 2))
-  //       while (inB > inA) {
-  //         inA = BigInt(r.nextInt(1 << totalWidth - 2))
-  //         inB = BigInt(r.nextInt(1 << totalWidth - 2))
-  //       }
-  //       poke(c.io.a, inA)
-  //       poke(c.io.b, inB)
-  //       res.enqueue(inA - inB)
-  //       step(1)
-  //     }
-  //   }
-
-  //   launchCppTester((c: DigitSubtractor) => new DigitSubtractorTests(c))
-  // }
-
   /* Least Significant Digit Implementations */
 
   val totalWidth = 16
@@ -468,6 +326,11 @@ class DSASuite extends TestSuite {
       }
     }
     out.toList
+  }
+
+  def signedListToUInt(in : List[Int]) : String = {
+    val out = in.map(x => if (x == 1) "10" else if (x == -1) "01" else "00")
+    "b" + out.mkString("")
   } 
 
   def toSignedDigit(a : Int) : BigInt = if (a == -1) BigInt(1) else toSignedDigit(BigInt(a))
@@ -764,26 +627,6 @@ class DSASuite extends TestSuite {
     }
   }
 
-  object MSDFRegister {
-
-    val litArray = 
-
-    def apply(a : UInt, initialIndex : Int = 0) : UInt = {
-      val literalWidth = a.getWidth()/2
-      for (i <- a.getWidth() - 1 to 1 by -2) {
-        val reg = Reg(init=a(i, i - 1))
-        litArray.append(reg)
-      }
-      val litRegs = Vec(litArray)
-      for (i <- 0 until litRegs.length - 1) {
-        litRegs(i) := litRegs(i + 1)
-      }
-      litRegs(litRegs.length - 1) := litRegs(0)
-      litRegs(initialIndex)
-    }
-
-    def update(a : UInt)
-  }
 
   object SDOnlineConversion {
     def apply(a : UInt, start : Bool) : UInt = {
@@ -1104,50 +947,54 @@ class DSASuite extends TestSuite {
   //   launchCppTester((c : SignedDigitAdder2Test) => new SignedDigitAdder2Tests(c))
   // }
 
-  // @Test def testMSDFAdd() {
-  //   class MSDFAddTest extends Module {
-  //     val io = new Bundle {
-  //       val a = UInt(INPUT, digit)
-  //       val b = UInt(INPUT, digit)
-  //       val c = UInt(OUTPUT, digit)
-  //     }
-  //     io.c := MSDFAdd(io.a, io.b)
-  //   }
+  @Test def testMSDFAdd() {
+    class MSDFAddTest extends Module {
+      val io = new Bundle {
+        val a = UInt(INPUT, digit)
+        val b = UInt(INPUT, digit)
+        val c = UInt(OUTPUT, digit)
+      }
+      io.c := MSDFAdd(io.a, io.b)
+    }
 
-  //   class MSDFAddTests(c : MSDFAddTest) extends Tester(c) {
-  //     for (i <- 0 until trials) {
-  //       val a = BigInt(r.nextInt(1 << totalWidth - 2))
-  //       val b = BigInt(r.nextInt(1 << totalWidth - 2))
-  //       val inA = toSignedDigit(a)
-  //       val inB = toSignedDigit(b)
-  //       var result = BigInt(0)
-  //       val bigN = n*2
-  //       for (j <- 0 until bigN + 2) {
-  //         val currA = (inA >> (digit*(bigN - j - 1)) & 0xF)
-  //         val currB = (inB >> (digit*(bigN - j - 1)) & 0xF)
-  //         poke(c.io.a, currA)
-  //         poke(c.io.b, currB)
-  //         val res = peek(c.io.c)
-  //         step(1)
-  //         if (j > 1) {
-  //           for (k <- 0 until digit) {
-  //             val set = if ((res & BigInt(1 << (digit - 1 - k))) == BigInt(scala.math.pow(2, (digit - 1 - k)).toInt)) true else false
-  //             result = if (set) result.setBit(digit*(bigN - j + 2) - k - 1) else result
-  //           }
-  //         }
-  //       }
-  //       val expectedResult = a + b
-  //       val expected = if(expectedResult == fromSignedDigit(result)) true else false
-  //       expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + fromSignedDigit(result).toString)
-  //     }
-  //   }
+    class MSDFAddTests(c : MSDFAddTest) extends Tester(c) {
+      for (i <- 0 until trials) {
+        val a = BigInt(r.nextInt(1 << totalWidth - 2))
+        val b = BigInt(r.nextInt(1 << totalWidth - 2))
+        val inA = toSignedDigit(a)
+        val inB = toSignedDigit(b)
+        var result = BigInt(0)
+        val bigN = n*2
+        for (j <- 0 until bigN + 2) {
+          val currA = (inA >> (digit*(bigN - j - 1)) & 0xF)
+          val currB = (inB >> (digit*(bigN - j - 1)) & 0xF)
+          poke(c.io.a, currA)
+          poke(c.io.b, currB)
+          val res = peek(c.io.c)
+          step(1)
+          if (j > 1) {
+            for (k <- 0 until digit) {
+              val set = if ((res & BigInt(1 << (digit - 1 - k))) == BigInt(scala.math.pow(2, (digit - 1 - k)).toInt)) true else false
+              result = if (set) result.setBit(digit*(bigN - j + 2) - k - 1) else result
+            }
+          }
+        }
+        val expectedResult = a + b
+        val expected = if(expectedResult == fromSignedDigit(result)) true else false
+        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + fromSignedDigit(result).toString)
+      }
+    }
 
-  //   launchCppTester((c : MSDFAddTest) => new MSDFAddTests(c))
-  // }
+    launchCppTester((c : MSDFAddTest) => new MSDFAddTests(c))
+  }
 
-  // @Test def testSignedToDouble() {
+  @Test def testSignedListToUInt() {
+    val lst = List(1, -1, 0, 1, -1, 0)
+    val expected = "b100100100100"
+    val res = signedListToUInt(lst)
+    assertTrue("Expected and Result is not equal", expected == res)
 
-  // }
+  }
 
   @Test def testMSDFAddMul() {
     class MSDFAddMulTest extends Module {
@@ -1321,52 +1168,52 @@ class DSASuite extends TestSuite {
     launchCppTester((c : MSDFMulTest) => new MSDFMulTests(c))
   }
 
-  @Test def testMSDFDotProduct() {
-    class MSDFDotProductTest extends Module {
-      val io = new Bundle {
-        val a = Vec.fill(2){UInt(INPUT, 2)}
-        val b = Vec.fill(2){UInt(INPUT, 2)}
-        val start = Bool(INPUT)
-        val c = UInt(OUTPUT, 2)
-      }
+  // @Test def testMSDFDotProduct() {
+  //   class MSDFDotProductTest extends Module {
+  //     val io = new Bundle {
+  //       val a = Vec.fill(2){UInt(INPUT, 2)}
+  //       val b = Vec.fill(2){UInt(INPUT, 2)}
+  //       val start = Bool(INPUT)
+  //       val c = UInt(OUTPUT, 2)
+  //     }
 
-      val threeDelay = ShiftRegister(io.start, 3)
-      val dotProduct = (io.a, io.b).zipped.map((ai, bi) => MSDFMul(ai, bi, io.start)).reduce((r, c) => MSDFAdd(r, c, threeDelay))
+  //     val threeDelay = ShiftRegister(io.start, 3)
+  //     val dotProduct = (io.a, io.b).zipped.map((ai, bi) => MSDFMul(ai, bi, io.start)).reduce((r, c) => MSDFAdd(r, c, threeDelay))
 
-      io.c := dotProduct
-    }
+  //     io.c := dotProduct
+  //   }
 
-    class MSDFDotProductTests(c : MSDFDotProductTest) extends Tester(c) {
+  //   class MSDFDotProductTests(c : MSDFDotProductTest) extends Tester(c) {
 
-      for (i <- 0 until trials) {
-        val dA = List.fill(2){r.nextDouble()/2}
-        val dB = List.fill(2){r.nextDouble()/2}
-        val a = dA.map(in => doubleToSigned(in, 8))
-        val b = dB.map(in => doubleToSigned(in, 8))
-        val res = new ArrayBuffer[Int]
-        for (j <- 0 until a(0).length + 5) {
-          for (k <- 0 until 2) {
-            val inA = if(j < a(k).length) a(k)(j) else 0
-            val inB = if(j < b(k).length) b(k)(j) else 0
-            poke(c.io.a(k), toSignedDigit(inA))
-            poke(c.io.b(k), toSignedDigit(inB))
-          }
-          val start = if (j == 0) BigInt(1) else BigInt(0)
-          poke(c.io.start, start)
-          peek(c.io.c)
-          if (j >= 5)
-            res.append(fromSignedDigit(peek(c.io.c).toInt))
-          step(1)
-        }
-        val expectedRes = (dA, dB).zipped.map(_*_).reduce(_+_)
-        val dRes = signedToDouble(res.toList)
-        val err = scala.math.abs(expectedRes - dRes)
-        val correct = if (err > scala.math.pow(2, -8)) false else true
-        expect(correct, "Expected: " + expectedRes.toString + "\tGot: " + dRes.toString + "\tError: " + err.toString)
-      }
-    }
-    launchCppTester((c : MSDFDotProductTest) => new MSDFDotProductTests(c))
-  }
+  //     for (i <- 0 until trials) {
+  //       val dA = List.fill(2){r.nextDouble()/2}
+  //       val dB = List.fill(2){r.nextDouble()/2}
+  //       val a = dA.map(in => doubleToSigned(in, 8))
+  //       val b = dB.map(in => doubleToSigned(in, 8))
+  //       val res = new ArrayBuffer[Int]
+  //       for (j <- 0 until a(0).length + 5) {
+  //         for (k <- 0 until 2) {
+  //           val inA = if(j < a(k).length) a(k)(j) else 0
+  //           val inB = if(j < b(k).length) b(k)(j) else 0
+  //           poke(c.io.a(k), toSignedDigit(inA))
+  //           poke(c.io.b(k), toSignedDigit(inB))
+  //         }
+  //         val start = if (j == 0) BigInt(1) else BigInt(0)
+  //         poke(c.io.start, start)
+  //         peek(c.io.c)
+  //         if (j >= 5)
+  //           res.append(fromSignedDigit(peek(c.io.c).toInt))
+  //         step(1)
+  //       }
+  //       val expectedRes = (dA, dB).zipped.map(_*_).reduce(_+_)
+  //       val dRes = signedToDouble(res.toList)
+  //       val err = scala.math.abs(expectedRes - dRes)
+  //       val correct = if (err > scala.math.pow(2, -8)) false else true
+  //       expect(correct, "Expected: " + expectedRes.toString + "\tGot: " + dRes.toString + "\tError: " + err.toString)
+  //     }
+  //   }
+  //   launchCppTester((c : MSDFDotProductTest) => new MSDFDotProductTests(c))
+  // }
 
   @Test def testMSDFLiteral() {
     class MSDFLiteralTest extends Module {
@@ -1407,4 +1254,179 @@ class DSASuite extends TestSuite {
     }
     launchCppTester((c : MSDFLiteralInitialTest) => new MSDFLiteralInitialTests(c))
   }
+
+
+  object MSDFRegister {
+    def apply(a : UInt) : Vec[UInt] = {
+      val literalWidth = a.getWidth()/2
+      val litArray = new ArrayBuffer[UInt]
+      for (i <- a.getWidth() - 1 to 1 by -2) {
+        val reg = Reg(init=a(i, i - 1))
+        litArray.append(reg)
+      }
+      Vec(litArray)
+    }
+
+    def apply(a : Vec[UInt]) : UInt = {
+      val literalWidth = a.length
+      val counter = Reg(init=UInt(0, width=log2Up(literalWidth)))
+      counter := counter + UInt(1)
+      a(counter)
+    }
+
+    def apply(in : Vec[UInt], index : UInt) = in(index)
+  }
+
+  @Test def testMSDFRegister() {
+    class MSDFRegisterTest extends Module {
+      val io = new Bundle {
+        val a = UInt(INPUT, 2)
+        val update = Bool(INPUT)
+        val c = UInt(OUTPUT, 2)
+      }
+      val wVec = MSDFRegister(UInt("b0010011000011000"))
+      val w = MSDFRegister(wVec)
+      when (io.update) { 
+        w := io.a 
+        wVec(UInt(0)) := UInt(1)
+      }
+      io.c := w
+    }
+
+    class MSDFRegisterTests(c : MSDFRegisterTest) extends Tester(c) {
+      val res1 = List(0, 2, 1, 2, 0, 1, 2, 0)
+      for (j <- 0 until 8) {
+        poke(c.io.a, 1)
+        if (j == 3) poke(c.io.update, 1) else poke(c.io.update, 0)
+        expect(c.io.c, res1(j))
+        step(1)
+      }
+      val res2 = List(1, 2, 1, 1, 0, 1, 2, 0)
+      for (j <- 0 until 8) {
+        poke(c.io.a, 1)
+        poke(c.io.update, 0)
+        expect(c.io.c, res2(j))
+        step(1)
+      }
+    }
+    launchCppTester((c : MSDFRegisterTest) => new MSDFRegisterTests(c))
+  }
+
+
+  object updateCounter {
+    def apply(rst : UInt, w : Int) : UInt = {
+      val counter = Reg(init=UInt(0, width=w))
+      when (rst === UInt(1)) {counter := UInt(0)}
+      counter := counter + UInt(1)
+      counter
+    }
+  }
+
+  object nextStart {
+    def apply(start : Bool, delay : Int) : UInt = {
+      val nsr = Reg(init=Cat(UInt(1), Fill(UInt(0), delay - 1)))
+      when (start) {
+        nsr := Cat(UInt(1), Fill(UInt(0), delay - 2))
+      } .otherwise {
+        nsr := nsr >> 1
+      }
+      nsr 
+    }
+  }
+
+  @Test def testMSDFAddAccum() {
+    class MSDFAddAccumTest extends Module {
+      val io = new Bundle {
+        val a = UInt(INPUT, 2)
+        val start = Bool(INPUT)
+        val c = UInt(OUTPUT, 2)
+      }
+      val wVec = MSDFRegister(UInt("b0000000000000000"))
+      val w = MSDFRegister(wVec)
+      val addRes = MSDFAdd(io.a, w, io.start)
+      val nextAddStart = nextStart(io.start, 2)
+      val wCounter = updateCounter(nextAddStart, wVec.length)
+      wVec(wCounter) := addRes
+      io.c := addRes
+    }
+
+    class MSDFAddAccumTests(c : MSDFAddAccumTest) extends Tester(c) {
+      var dB = 0.0
+      for (i <- 0 until 5) {
+        val dA = r.nextDouble()/8
+        val a = doubleToSigned(dA, 8)
+        val b = doubleToSigned(dB, 8)
+        val res = new ArrayBuffer[Int]
+        for (j <- 0 until 8 + 2) {
+          val inA = if(j < a.length) a(j) else 0
+          poke(c.io.a, toSignedDigit(inA))
+          val start = if (j == 0) BigInt(1) else BigInt(0)
+          poke(c.io.start, start)
+          if (j >= 2)
+            res.append(fromSignedDigit(peek(c.io.c).toInt))
+          step(1)
+        }
+        val expectedRes = signedToDouble(a)+signedToDouble(b)
+        val dRes = signedToDouble(res.toList)
+        dB = dRes
+        val err = scala.math.abs(expectedRes - dRes)
+        val correct = if (err > scala.math.pow(2, -8)) false else true
+        expect(correct, "Expected: " + expectedRes.toString + "(" + (dA+dB).toString + ")" + "\tGot: " + dRes.toString + "\tError: " + err.toString)
+      }
+    }
+    launchCppTester((c : MSDFAddAccumTest) => new MSDFAddAccumTests(c))
+  }
+
+  // @Test def testMSDFDotProduct() {
+  //   class MSDFDotProductTest extends Module {
+  //     val io = new Bundle {
+  //       val x = Vec.fill(2){UInt(INPUT, 2)}
+  //       val y = UInt(INPUT, 2)
+  //       val start = Bool(INPUT)
+  //       val c = UInt(OUTPUT, 2)
+  //     }
+
+  //     val wVec = Vec.fill(2){MSDFRegister(UInt("b0000000000000000"))}
+  //     val w = Vec(wVec.map(MSDFRegister(_))
+  //     val threeDelay = ShiftRegister(io.start, 3)
+  //     val dotProduct = (io.a, w).zipped.map((ai, bi) => MSDFMul(ai, bi, io.start)).reduce((r, c) => MSDFAdd(r, c, threeDelay))
+
+  //     val yDelay = ShiftRegister(y, 5)
+
+  //     val err = dotProduct - yDelay
+  //     io.c := dotProduct
+  //   }
+
+  //   class MSDFDotProductTests(c : MSDFDotProductTest) extends Tester(c) {
+
+  //     for (i <- 0 until trials) {
+  //       val dA = List.fill(2){r.nextDouble()/2}
+  //       val dB = List.fill(2){r.nextDouble()/2}
+  //       val a = dA.map(in => doubleToSigned(in, 8))
+  //       val b = dB.map(in => doubleToSigned(in, 8))
+  //       val res = new ArrayBuffer[Int]
+  //       for (j <- 0 until a(0).length + 5) {
+  //         for (k <- 0 until 2) {
+  //           val inA = if(j < a(k).length) a(k)(j) else 0
+  //           val inB = if(j < b(k).length) b(k)(j) else 0
+  //           poke(c.io.a(k), toSignedDigit(inA))
+  //           poke(c.io.b(k), toSignedDigit(inB))
+  //         }
+  //         val start = if (j == 0) BigInt(1) else BigInt(0)
+  //         poke(c.io.start, start)
+  //         peek(c.io.c)
+  //         if (j >= 5)
+  //           res.append(fromSignedDigit(peek(c.io.c).toInt))
+  //         step(1)
+  //       }
+  //       val expectedRes = (dA, dB).zipped.map(_*_).reduce(_+_)
+  //       val dRes = signedToDouble(res.toList)
+  //       val err = scala.math.abs(expectedRes - dRes)
+  //       val correct = if (err > scala.math.pow(2, -8)) false else true
+  //       expect(correct, "Expected: " + expectedRes.toString + "\tGot: " + dRes.toString + "\tError: " + err.toString)
+  //     }
+  //   }
+  //   launchCppTester((c : MSDFDotProductTest) => new MSDFDotProductTests(c))
+  // }
+
 }
