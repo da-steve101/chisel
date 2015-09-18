@@ -333,6 +333,15 @@ class DSASuite extends TestSuite {
     "b" + out.mkString("")
   } 
 
+  def toSignedDigit(a : List[Int]) : BigInt = {
+    val signedEle = a.map(toSignedDigit(_))
+    var res : BigInt = BigInt(0)
+    for (i <- signedEle.length - 1 to 0 by -1) {
+      res += (signedEle(i) << ((signedEle.length - 1 - i)*2))
+    }
+    res
+  }
+
   def toSignedDigit(a : Int) : BigInt = if (a == -1) BigInt(1) else toSignedDigit(BigInt(a))
   def toSignedDigit(a : BigInt) : BigInt = {
     var count = 0
@@ -346,27 +355,36 @@ class DSASuite extends TestSuite {
     res
   }
 
-  def fromSignedDigit(a : Int) : Int = fromSignedDigit(BigInt(a)).toInt
-  def fromSignedDigit(a : BigInt) : BigInt = {
-    var signedDigits = new ArrayBuffer[Int]
-    var i = 0
-    while (i < a.bitLength) {
-      if(a.testBit(i+1) && a.testBit(i)) {
-        signedDigits.append(0)
-      } else if(a.testBit(i+1) && !a.testBit(i)) {
-        signedDigits.append(1)
-      } else if(!a.testBit(i+1) && a.testBit(i)) {
-        signedDigits.append(-1)
-      } else {
-        signedDigits.append(0)
-      }
-      i += 2
-    }
+  def signedArraytoInt(signedDigits : ArrayBuffer[Int]) : BigInt = {
     var res : BigInt = BigInt(0)
     for (i <- 0 until signedDigits.length) {
       res += signedDigits(i)*scala.math.pow(2, i).toInt
     }
     res
+  }
+
+  // def fromSignedDigit(a : Int) : Int = fromSignedDigit(BigInt(a)).toInt
+  def fromSignedDigit(a : BigInt) : ArrayBuffer[Int] = fromSignedDigit(a, 1)
+  def fromSignedDigit(a : BigInt, expectedDigits : Int) : ArrayBuffer[Int] = {
+    var signedDigits = new ArrayBuffer[Int]
+    var i = 0
+    while (i < a.bitLength) {
+      if(a.testBit(i+1) && a.testBit(i)) {
+        signedDigits.prepend(0)
+      } else if(a.testBit(i+1) && !a.testBit(i)) {
+        signedDigits.prepend(1)
+      } else if(!a.testBit(i+1) && a.testBit(i)) {
+        signedDigits.prepend(-1)
+      } else {
+        signedDigits.prepend(0)
+      }
+      i += 2
+    }
+    if (signedDigits.length != expectedDigits) {
+      for (i <- 0 until (expectedDigits - signedDigits.length))
+        signedDigits.prepend(0)
+    }
+    signedDigits
   }
 
   object fourToTwoAdder {
@@ -494,14 +512,14 @@ class DSASuite extends TestSuite {
       w(0) := w0
 
       for (i <- 1 until a.getWidth()/2 - 1) {
-        val (w0, t1) = FullAdder(v(i), ~bn(i), h(i))
+        val (w1, t1) = FullAdder(v(i), ~bn(i), h(i))
         t(i - 1) := ~t1
-        w(i) := w0
+        w(i) := w1
       }
       if (a.getWidth()/2 != 1) {
-        val (w1, t2) = FullAdder(v(a.getWidth()/2 - 1), ~bn(a.getWidth()/2 - 1), hTrans)
+        val (w2, t2) = FullAdder(v(a.getWidth()/2 - 1), ~bn(a.getWidth()/2 - 1), hTrans)
         t(a.getWidth()/2 - 2) := ~t2
-        w(a.getWidth()/2 - 1) := w1
+        w(a.getWidth()/2 - 1) := w2
       }
 
       // Do the third stage
@@ -521,6 +539,144 @@ class DSASuite extends TestSuite {
 
     }
   }
+
+
+  /* Most Significant Digit Division
+   * 1. [Initialize]
+   *   x[-4] = d[-4] = w[-4] = q[0] = 0
+   *   for j = -4 ... -1
+   *     d[j + 1] = CA(d[j], dj5)
+   *     v[j]     = 2w[j] + xj5*2^-4
+   *     w[j + 1] = v[j]
+   *   end for
+   * 2. [Recurrence]
+   *   for j = 0 ... n - 1
+   *     d[j + 1] = CA(d[j], dj5)
+   *     v[j]     = 2w[j] + xj5*2^-4 - q[j]dj5*2^-4
+   *     qj1      = SELD(v[j])
+   *     w[j + 1] = v[j] - qj1*d[j + 1]
+   *     q[j + 1] = CA(q[j], qj1)
+   *     Qout     = qj1
+   *   end for
+   */
+   object MSDFDiv {
+    def apply(x : UInt, d : UInt, start : Bool) : UInt = {
+      val caQ = Reg(init=UInt(0, width=14))
+      val caD = Reg(init=UInt(0, width=14))
+      val ws = Reg(init=UInt(0, width=14))
+      val wc = Reg(init=UInt(0, width=14))
+      val nxtQ = Reg(init=UInt(0, width=1))
+
+      // d[j + 1] = CA(d[j], dj5)
+      val newD = SDOnlineConversion(d, start)
+      caD := newD
+
+      // D Selector : -qj1*d[j + 1]
+      val inD = MuxCase(UInt(0), Array(
+        (nxtQ === UInt("b01")) -> newD,
+        (nxtQ === UInt("b10")) -> ~newD
+        ))
+
+      // Q Selector : -q[j]*dj5*2^-4
+      val inQ = MuxCase(UInt(0), Array(
+        (d === UInt("b01")) -> caQ,
+        (d === UInt("b10")) -> ~caQ
+        )) >> 4
+
+      // xj5*2^-4 - q[j]*dk5*2^-4
+      // val inXQ = x
+
+      // Carry cd
+      val cD = Mux( ((nxtQ === UInt("b10")) & (d === UInt("b10"))) | ((nxtQ === UInt("b01")) & (d === UInt("b01"))), UInt(1), UInt(0))
+
+      // v[j] = 2w[j] + xj5*2^-4 - q[j]*dj5*2^-4
+      val (s1, c1) = CarrySaveAdder(ws, wc, inQ, cD)
+
+      // qj1 = SELD(v[j])
+      val v = s1(s1.getWidth() - 1, s1.getWidth() - 6) + c1(c1.getWidth() - 1, c1.getWidth() - 6)
+      val nQ = SEL(v)
+      
+      nxtQ := nQ
+
+      // q[j + 1] = CA(q[j], qj1)
+      caQ := SDOnlineConversion(nQ, start)
+
+      // Carry cq
+      val cQ = Mux( ((nxtQ === UInt("b10")) & (d === UInt("b10"))) | ((nxtQ === UInt("b01")) & (d === UInt("b01"))), UInt(1), UInt(0))
+
+      // w[j + 1] = v[j] - qj1*d[j + 1]
+      val (s2, c2) = CarrySaveAdder(s1, c1, inD, cQ)
+
+      ws := s2 << 1
+      wc := c2 << 1
+
+      nQ
+    }
+
+    def U(x : UInt, d : UInt, q : UInt) : UInt = {
+      // Gate Network Implementation
+      // // x Values
+      // val xP = x(1)
+      // val xN = x(0)
+      // val xZ = !(xP ^ xN)
+
+      // // d Value
+      // val dP = d(1)
+      // val dN = d(0)
+      // val dZ = !(dP ^ dN)
+
+      // // q Sign
+      // val qS = q
+
+      // val ui = xN + (xZ & ((dP & ~qS) + (dN & qS)))
+      // val u4 = (~xN & dZ) + (~xZ & ((dP & qS) + (dN & ~qS))) + (xZ & ((dP & ~qS) + (dN & qS)))
+      // Cat(Fill(ui, 5), u4)
+
+      // Mux Implementation
+      MuxCase(UInt("b000000"), Array(
+        ((x === UInt("b10")) & (d === UInt("b10"))) -> UInt("b000000"), // 1
+        ((x === UInt("b10")) & (d === UInt("b00"))) -> UInt("b000001"), // 2
+        ((x === UInt("b10")) & (d === UInt("b11"))) -> UInt("b000001"), // 2
+        ((x === UInt("b10")) & (d === UInt("b01"))) -> UInt("b000001"), // 3
+        ((x === UInt("b00")) & (d === UInt("b10"))) -> UInt("b111111"), // 4
+        ((x === UInt("b00")) & (d === UInt("b00"))) -> UInt("b000000"), // 5
+        ((x === UInt("b00")) & (d === UInt("b11"))) -> UInt("b000000"), // 5
+        ((x === UInt("b00")) & (d === UInt("b01"))) -> UInt("b000000"), // 6
+        ((x === UInt("b11")) & (d === UInt("b10"))) -> UInt("b111111"), // 4
+        ((x === UInt("b11")) & (d === UInt("b00"))) -> UInt("b000000"), // 5
+        ((x === UInt("b11")) & (d === UInt("b11"))) -> UInt("b000000"), // 5
+        ((x === UInt("b11")) & (d === UInt("b01"))) -> UInt("b000000"), // 6
+        ((x === UInt("b01")) & (d === UInt("b10"))) -> UInt("b111110"), // 7
+        ((x === UInt("b01")) & (d === UInt("b00"))) -> UInt("b111111"), // 8
+        ((x === UInt("b01")) & (d === UInt("b11"))) -> UInt("b111111"), // 8
+        ((x === UInt("b01")) & (d === UInt("b01"))) -> UInt("b111111")  // 9
+        ))
+    }
+
+    // Optimise by removing the LSB of a
+    def SEL(a : UInt) : UInt = {
+      MuxCase(UInt("b01"), Array(
+        (a === UInt("b01111")) -> UInt("b10"), //  1.875
+        (a === UInt("b01110")) -> UInt("b10"), //  1.750
+        (a === UInt("b01101")) -> UInt("b10"), //  1.625
+        (a === UInt("b01100")) -> UInt("b10"), //  1.500
+        (a === UInt("b01011")) -> UInt("b10"), //  1.375
+        (a === UInt("b01010")) -> UInt("b10"), //  1.250
+        (a === UInt("b01001")) -> UInt("b10"), //  1.125
+        (a === UInt("b01000")) -> UInt("b10"), //  1.000
+        (a === UInt("b00111")) -> UInt("b10"), //  0.875
+        (a === UInt("b00110")) -> UInt("b10"), //  0.750
+        (a === UInt("b00101")) -> UInt("b10"), //  0.625
+        (a === UInt("b00100")) -> UInt("b10"), //  0.500
+        (a === UInt("b00011")) -> UInt("b10"), //  0.375
+        (a === UInt("b00010")) -> UInt("b10"), //  0.250
+        (a === UInt("b00001")) -> UInt("b00"), //  0.125
+        (a === UInt("b00000")) -> UInt("b00"), //  0.000
+        (a === UInt("b11111")) -> UInt("b00"), // -0.125
+        (a === UInt("b11110")) -> UInt("b00")  // -0.250
+      ))
+    }
+   }
 
   /* Most Significant Digit Multiplication
    * 1. [Initialize]
@@ -556,10 +712,10 @@ class DSASuite extends TestSuite {
 
       // x[j]*yj4
       val inA = UInt(width=14)
-      inA := MuxCase(UInt(0), Array(
+      inA := Mux(start, UInt(0), MuxCase(UInt(0), Array(
         (b === UInt("b01")) -> ~caA,
         (b === UInt("b10")) -> caA
-        ))
+        )))
 
       // y[j + 1]*xj4
       val inB = UInt(width=14)
@@ -597,15 +753,13 @@ class DSASuite extends TestSuite {
 
 
     def SEL(a : UInt) : UInt = {
-      MuxCase(UInt(0), Array(
-        (a === UInt("b000")) -> UInt("b00"),
+      MuxCase(UInt("b00"), Array(
         (a === UInt("b001")) -> UInt("b10"),
         (a === UInt("b010")) -> UInt("b10"),
         (a === UInt("b011")) -> UInt("b10"),
         (a === UInt("b100")) -> UInt("b01"),
         (a === UInt("b101")) -> UInt("b01"),
-        (a === UInt("b110")) -> UInt("b01"),
-        (a === UInt("b111")) -> UInt("b00")
+        (a === UInt("b110")) -> UInt("b01")
         ))
     }
   }
@@ -663,6 +817,26 @@ class DSASuite extends TestSuite {
 
       nextQ << inCounter
     }
+
+    def apply(in : UInt, inQ : UInt, inQM : UInt, currCounter : UInt) : (UInt, UInt, UInt, UInt) = {
+      val negOne = in === UInt("b01")
+      val one = in === UInt("b10")
+      val zero = !negOne & !one
+
+      val nextQM = MuxCase(UInt(0), Array(
+        one -> Cat(inQ, UInt(0)),
+        zero -> Cat(inQM, UInt(1)),
+        negOne -> Cat(inQM, UInt(0))
+        ))
+
+      val nextQ = MuxCase(UInt(0), Array(
+        one -> Cat(inQ, UInt(1)),
+        zero -> Cat(inQ, UInt(0)),
+        negOne -> Cat(inQM, UInt(1))
+        ))
+
+      (nextQ << currCounter, nextQ, nextQM, currCounter - UInt(1))
+    }
   }
 
   @Test def testMSDFMulSEL() {
@@ -705,6 +879,152 @@ class DSASuite extends TestSuite {
     launchCppTester((c : MSDFMulSELTest) => new MSDFMulSELTests(c))
   }
 
+  @Test def testMSDFDivSEL() {
+    class MSDFDivSELTest extends Module {
+      val io = new Bundle {
+        val a = UInt(INPUT, 5)
+        val c = UInt(OUTPUT, 2)
+      }
+      io.c := MSDFDiv.SEL(io.a)
+    }
+
+    class MSDFDivSELTests(c : MSDFDivSELTest) extends Tester(c) {
+      val sel = List(
+        UInt("b00000").litValue(), 
+        UInt("b00001").litValue(), 
+        UInt("b00010").litValue(), 
+        UInt("b00011").litValue(), 
+        UInt("b00100").litValue(),
+        UInt("b00101").litValue(),
+        UInt("b00110").litValue(),
+        UInt("b00111").litValue(),
+        UInt("b01000").litValue(), 
+        UInt("b01001").litValue(), 
+        UInt("b01010").litValue(), 
+        UInt("b01011").litValue(), 
+        UInt("b01100").litValue(),
+        UInt("b01101").litValue(),
+        UInt("b01110").litValue(),
+        UInt("b01111").litValue(),
+        UInt("b10000").litValue(), 
+        UInt("b10001").litValue(), 
+        UInt("b10010").litValue(), 
+        UInt("b10011").litValue(), 
+        UInt("b10100").litValue(),
+        UInt("b10101").litValue(),
+        UInt("b10110").litValue(),
+        UInt("b10111").litValue(),
+        UInt("b11000").litValue(), 
+        UInt("b11001").litValue(), 
+        UInt("b11010").litValue(), 
+        UInt("b11011").litValue(), 
+        UInt("b11100").litValue(),
+        UInt("b11101").litValue(),
+        UInt("b11110").litValue(),
+        UInt("b11111").litValue()
+        )
+      val selAns = List(
+        UInt("b00").litValue(), 
+        UInt("b00").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b10").litValue(), 
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b01").litValue(),
+        UInt("b00").litValue(),
+        UInt("b00").litValue()
+        )
+
+      for (i <- 0 until sel.length) {
+        poke(c.io.a, sel(i))
+        expect(c.io.c, selAns(i))
+      }
+    }
+
+    launchCppTester((c : MSDFDivSELTest) => new MSDFDivSELTests(c))
+  }
+
+  @Test def testMSDFDivU() {
+    class MSDFDivUTest extends Module {
+      val io = new Bundle {
+        val x = UInt(INPUT, 2)
+        val d = UInt(INPUT, 2)
+        val c = UInt(OUTPUT, 6)
+      }
+      io.c := MSDFDiv.U(io.x, io.d, UInt("b0"))
+    }
+
+    class MSDFDivUTests(c : MSDFDivUTest) extends Tester(c) {
+      val u = List(
+        List(UInt("b10").litValue(), UInt("b10").litValue()),
+        List(UInt("b10").litValue(), UInt("b00").litValue()),
+        List(UInt("b10").litValue(), UInt("b01").litValue()),
+        List(UInt("b10").litValue(), UInt("b11").litValue()),
+        List(UInt("b00").litValue(), UInt("b10").litValue()),
+        List(UInt("b00").litValue(), UInt("b00").litValue()),
+        List(UInt("b00").litValue(), UInt("b01").litValue()),
+        List(UInt("b00").litValue(), UInt("b11").litValue()),
+        List(UInt("b01").litValue(), UInt("b10").litValue()),
+        List(UInt("b01").litValue(), UInt("b00").litValue()),
+        List(UInt("b01").litValue(), UInt("b01").litValue()),
+        List(UInt("b01").litValue(), UInt("b11").litValue()),
+        List(UInt("b11").litValue(), UInt("b10").litValue()),
+        List(UInt("b11").litValue(), UInt("b00").litValue()),
+        List(UInt("b11").litValue(), UInt("b01").litValue()),
+        List(UInt("b11").litValue(), UInt("b11").litValue())
+        )
+      val uAns = List(
+        UInt("b000000").litValue(), 
+        UInt("b000001").litValue(), 
+        UInt("b000001").litValue(), 
+        UInt("b000001").litValue(), 
+        UInt("b111111").litValue(), 
+        UInt("b000000").litValue(), 
+        UInt("b000000").litValue(), 
+        UInt("b000000").litValue(), 
+        UInt("b111110").litValue(), 
+        UInt("b111111").litValue(), 
+        UInt("b111111").litValue(), 
+        UInt("b111111").litValue(), 
+        UInt("b111111").litValue(), 
+        UInt("b000000").litValue(), 
+        UInt("b000000").litValue(), 
+        UInt("b000000").litValue() 
+        )
+
+      for (i <- 0 until u.length) {
+        poke(c.io.x, u(i)(0))
+        poke(c.io.d, u(i)(1))
+        expect(c.io.c, uAns(i))
+      }
+    }
+
+    launchCppTester((c : MSDFDivUTest) => new MSDFDivUTests(c))
+  }
+
   @Test def testSDOnlineConversion() {
     class SDOnlineConversionTest extends Module {
       val io = new Bundle {
@@ -740,37 +1060,37 @@ class DSASuite extends TestSuite {
     launchCppTester((c : SDOnlineConversionTest) => new SDOnlineConversionTests(c))
   }
 
-  @Test def testToSignedDigit() {
-    val a = BigInt(1)
-    val b = toSignedDigit(a)
-    assertTrue(b == BigInt(2))
+  // @Test def testToSignedDigit() {
+  //   val a = BigInt(1)
+  //   val b = toSignedDigit(a)
+  //   assertTrue(b == BigInt(2))
 
-    val c = 3
-    val d = toSignedDigit(c)
-    assertTrue(d == BigInt(10))
-  }
+  //   val c = 3
+  //   val d = toSignedDigit(c)
+  //   assertTrue(d == BigInt(10))
+  // }
 
-  @Test def testFromSignedDigit() {
-    val a = BigInt(1)
-    val b = fromSignedDigit(a)
-    assertTrue(b == BigInt(-1))
+  // @Test def testFromSignedDigit() {
+  //   val a = BigInt(1)
+  //   val b = fromSignedDigit(a)
+  //   assertTrue(b == BigInt(-1))
 
-    val c = 3
-    val d = fromSignedDigit(c)
-    assertTrue(d == BigInt(0))
+  //   val c = 3
+  //   val d = fromSignedDigit(c)
+  //   assertTrue(d == BigInt(0))
 
-    val e = 2
-    val f = fromSignedDigit(e)
-    assertTrue(f == BigInt(1))
-  }
+  //   val e = 2
+  //   val f = fromSignedDigit(e)
+  //   assertTrue(f == BigInt(1))
+  // }
 
-  @Test def testConversion() {
-    for (i <- 0 until trials) {
-      val a = BigInt(r.nextInt(100000))
-      val b = fromSignedDigit(toSignedDigit(a))
-      assertTrue(a == b)
-    }
-  }
+  // @Test def testConversion() {
+  //   for (i <- 0 until trials) {
+  //     val a = BigInt(r.nextInt(100000))
+  //     val b = fromSignedDigit(toSignedDigit(a))
+  //     assertTrue(a == b)
+  //   }
+  // }
 
   @Test def testCarrySaveAdder() {
     class CarrySaveAdderTest extends Module {
@@ -947,47 +1267,6 @@ class DSASuite extends TestSuite {
   //   launchCppTester((c : SignedDigitAdder2Test) => new SignedDigitAdder2Tests(c))
   // }
 
-  @Test def testMSDFAdd() {
-    class MSDFAddTest extends Module {
-      val io = new Bundle {
-        val a = UInt(INPUT, digit)
-        val b = UInt(INPUT, digit)
-        val c = UInt(OUTPUT, digit)
-      }
-      io.c := MSDFAdd(io.a, io.b)
-    }
-
-    class MSDFAddTests(c : MSDFAddTest) extends Tester(c) {
-      for (i <- 0 until trials) {
-        val a = BigInt(r.nextInt(1 << totalWidth - 2))
-        val b = BigInt(r.nextInt(1 << totalWidth - 2))
-        val inA = toSignedDigit(a)
-        val inB = toSignedDigit(b)
-        var result = BigInt(0)
-        val bigN = n*2
-        for (j <- 0 until bigN + 2) {
-          val currA = (inA >> (digit*(bigN - j - 1)) & 0xF)
-          val currB = (inB >> (digit*(bigN - j - 1)) & 0xF)
-          poke(c.io.a, currA)
-          poke(c.io.b, currB)
-          val res = peek(c.io.c)
-          step(1)
-          if (j > 1) {
-            for (k <- 0 until digit) {
-              val set = if ((res & BigInt(1 << (digit - 1 - k))) == BigInt(scala.math.pow(2, (digit - 1 - k)).toInt)) true else false
-              result = if (set) result.setBit(digit*(bigN - j + 2) - k - 1) else result
-            }
-          }
-        }
-        val expectedResult = a + b
-        val expected = if(expectedResult == fromSignedDigit(result)) true else false
-        expect(expected, "Expected: " + expectedResult.toString + "\tGot: " + fromSignedDigit(result).toString)
-      }
-    }
-
-    launchCppTester((c : MSDFAddTest) => new MSDFAddTests(c))
-  }
-
   @Test def testSignedListToUInt() {
     val lst = List(1, -1, 0, 1, -1, 0)
     val expected = "b100100100100"
@@ -1025,7 +1304,7 @@ class DSASuite extends TestSuite {
           val start = if (j == 0) BigInt(1) else BigInt(0)
           poke(c.io.start, start)
           if (j >= 5)
-            res.append(fromSignedDigit(peek(c.io.c).toInt))
+            res ++= fromSignedDigit(peek(c.io.c).toInt)
           step(1)
         }
         
@@ -1071,7 +1350,7 @@ class DSASuite extends TestSuite {
           val start = if (j == 0) BigInt(1) else BigInt(0)
           poke(c.io.start, start)
           if (j >= 5)
-            res.append(fromSignedDigit(peek(c.io.c).toInt))
+            res ++= fromSignedDigit(peek(c.io.c).toInt)
           step(1)
         }
         
@@ -1086,7 +1365,7 @@ class DSASuite extends TestSuite {
 
     launchCppTester((c : MSDFMulAddTest) => new MSDFMulAddTests(c))
   }
-
+  
   @Test def testMSDFAdd() {
     class MSDFAddTest extends Module {
       val io = new Bundle {
@@ -1099,21 +1378,23 @@ class DSASuite extends TestSuite {
     }
 
     class MSDFAddTests(c : MSDFAddTest) extends Tester(c) {
+      val digitNumber = 1
       for (i <- 0 until trials) {
         val dA = r.nextDouble()/2
         val dB = r.nextDouble()/2
         val a = doubleToSigned(dA, 8)
         val b = doubleToSigned(dB, 8)
         val res = new ArrayBuffer[Int]
-        for (j <- 0 until 8 + 2) {
-          val inA = if(j < a.length) a(j) else 0
-          val inB = if(j < b.length) b(j) else 0
+        for (j <- 0 until 8 + 2*digitNumber by digitNumber) {
+          val inA = if(j < a.length) a.slice(j, j+digitNumber) else List.fill(digitNumber){0}
+          val inB = if(j < b.length) b.slice(j, j+digitNumber) else List.fill(digitNumber){0}
           poke(c.io.a, toSignedDigit(inA))
           poke(c.io.b, toSignedDigit(inB))
           val start = if (j == 0) BigInt(1) else BigInt(0)
+          peek(c.io.c)
           poke(c.io.start, start)
-          if (j >= 2)
-            res.append(fromSignedDigit(peek(c.io.c).toInt))
+          if (j >= 2*digitNumber)
+            res ++= fromSignedDigit(peek(c.io.c).toInt, digitNumber)
           step(1)
         }
         val expectedRes = signedToDouble(a)+signedToDouble(b)
@@ -1155,7 +1436,7 @@ class DSASuite extends TestSuite {
           poke(c.io.start, start)
           peek(c.io.c)
           if (j >= 3)
-            res.append(fromSignedDigit(peek(c.io.c).toInt))
+            res ++= fromSignedDigit(peek(c.io.c).toInt)
           step(1)
         }
         val expectedRes = signedToDouble(a)*signedToDouble(b)
@@ -1363,7 +1644,7 @@ class DSASuite extends TestSuite {
           val start = if (j == 0) BigInt(1) else BigInt(0)
           poke(c.io.start, start)
           if (j >= 2)
-            res.append(fromSignedDigit(peek(c.io.c).toInt))
+            res ++= fromSignedDigit(peek(c.io.c).toInt)
           step(1)
         }
         val expectedRes = signedToDouble(a)+signedToDouble(b)
