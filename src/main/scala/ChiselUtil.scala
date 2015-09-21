@@ -150,7 +150,7 @@ object ShiftRegister
   def apply[T <: Data](in: T, n: Int) : T = apply(in, n, Bool(true))
   /** @param in input to delay
     * @param n number of cycles to delay
-    * @param en enable the shift */
+    * @param en enable the input to the ShiftRegister */
   def apply[T <: Data](in: T, n: Int, en: Bool) : T =
   {
     // The order of tests reflects the expected use cases.
@@ -170,7 +170,7 @@ object ShiftRegister
   /** @param in input to delay
     * @param init reset value to use
     * @param n number of cycles to delay
-    * @param en enable the shift */
+    * @param en enable the input to the ShiftRegister */
   def apply[T <: Data](in: T, init: T, n: Int, en: Bool) : T =
   {
     // The order of tests reflects the expected use cases.
