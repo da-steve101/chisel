@@ -133,9 +133,10 @@ object Driver extends FileSystemUtilities{
 
     // Do BFS
     val _walked = HashSet[Node](queue:_*)
+    // Avoid a "java.lang.IllegalArgumentException: Flat hash tables cannot contain null elements" if node is null - unassigned MUX
     def walked(node: Node) = _walked contains node
     def enqueueNode(node: Node) { queue enqueue node ; _walked += node }
-    def enqueueInputs(top: Node) { top.inputs filterNot walked foreach enqueueNode }
+    def enqueueInputs(top: Node) { top.inputs filterNot(_ == null) filterNot walked foreach enqueueNode }
     def enqueueElems(agg: Data) { agg.flatten.unzip._2 filterNot walked foreach enqueueNode }
     while (!queue.isEmpty) {
       val top = queue.dequeue
@@ -169,9 +170,10 @@ object Driver extends FileSystemUtilities{
 
     // Do DFS
     val _walked = HashSet[Node](stack:_*)
+    // Avoid a "java.lang.IllegalArgumentException: Flat hash tables cannot contain null elements" if node is null - unassigned MUX
     def walked(node: Node) = _walked contains node
     def pushNode(node: Node) { stack push node ; _walked += node }
-    def pushInputs(top: Node) { top.inputs.toList filterNot walked foreach pushNode }
+    def pushInputs(top: Node) { top.inputs.toList filterNot(_ == null) filterNot walked foreach pushNode }
     def pushElems(agg: Data) { agg.flatten.unzip._2 filterNot walked foreach pushNode }
     while (!stack.isEmpty) {
       val top = stack.pop
@@ -289,7 +291,6 @@ object Driver extends FileSystemUtilities{
     parallelMakeJobs = 0
     isVCDinline = false
     isSupportW0W = false
-    hasMem = false
     backend = new CppBackend
     topComponent = None
     moduleNamePrefix = ""
@@ -460,7 +461,6 @@ object Driver extends FileSystemUtilities{
   var parallelMakeJobs = 0
   var isVCDinline = false
   var isSupportW0W = false
-  var hasMem = false
   var backend: Backend = new CppBackend
   var topComponent: Option[Module] = None 
   var moduleNamePrefix = ""

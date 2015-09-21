@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2011, 2012, 2013, 2014, 2015 The Regents of the University of
+ Copyright (c) 2011 - 2015 The Regents of the University of
  California (Regents). All Rights Reserved.  Redistribution and use in
  source and binary forms, with or without modification, are permitted
  provided that the following conditions are met:
@@ -28,42 +28,51 @@
  MODIFICATIONS.
 */
 
-import scala.util.matching.Regex
-import org.junit.Assert._
 import org.junit.Test
-import org.junit.Ignore
 
 import Chisel._
 
-class FlushPrintfOutput extends TestSuite {
-  @Test def testFlushPrintfOutput() {
-    println("\ntestFlushPrintfOutput ...")
-    val whiteSpaceRE = """\s""".r
-    def eliminateWhiteSpace(s: String): String = whiteSpaceRE.replaceAllIn(s, "")
-
-    class PrintfModule extends Module {
-      val io = new DecoupledUIntIO
-      val counter = Reg(UInt(width = 8), init = UInt(0))
-      val counterString = "counter = %d\n"
-      counter := counter + UInt(1)
-      printf(counterString, counter);
+class DoubleSuite extends TestSuite {
+  @Test def testCompareDbl() {
+    println("\ntestCompareDbl...")
+    class CompareDblModule extends Module {
+      class IO extends Bundle {
+        val in1 = Dbl(INPUT)
+        val in2 = Dbl(INPUT)
+        val outLT = Bool(OUTPUT)
+        val outLE = Bool(OUTPUT)
+        val outGT = Bool(OUTPUT)
+        val outGE = Bool(OUTPUT)
+      }
+      val io = new IO()
+      val dbl1 = io.in1
+      val dbl2 = io.in2
+      io.outLT := dbl1 < dbl2
+      io.outLE := dbl1 <= dbl2
+      io.outGT := dbl1 > dbl2
+      io.outGE := dbl1 >= dbl2
     }
 
-    trait FlushPrintfOutputTests extends Tests {
-      def tests(m: PrintfModule) {
-        for (i <- 0 until 4) {
-          step(1)
-          // Fetch the output printed on stdout by the test.
-          val printfOutput = testOutputString
-          val expectedString = m.counterString.format(i)
-          assertTrue("incorrect output - %s".format(printfOutput), eliminateWhiteSpace(printfOutput) == eliminateWhiteSpace(expectedString))
+    trait CompareDblModuleTests extends Tests {
+      def tests(m: CompareDblModule) {
+        for (i <- 0 to 100) {
+          val dbl1 = rnd.nextDouble
+          val dbl2 = rnd.nextDouble
+          
+          poke(m.io.in1, dbl1)
+          poke(m.io.in2, dbl2)
+          expect(m.io.outLT, if (dbl1 < dbl2) 1 else 0)
+          expect(m.io.outLE, if (dbl1 <= dbl2) 1 else 0)
+          expect(m.io.outGT, if (dbl1 > dbl2) 1 else 0)
+          expect(m.io.outGE, if (dbl1 >= dbl2) 1 else 0)
         }
       }
     }
 
-    class FlushPrintfOutputTester(m: PrintfModule) extends Tester(m) with FlushPrintfOutputTests {
+    class CompareDblModuleTester(m: CompareDblModule) extends Tester(m) with CompareDblModuleTests {
       tests(m)
     }
-    launchCppTester((m: PrintfModule) => new FlushPrintfOutputTester(m))
+
+    launchCppTester((m: CompareDblModule) => new CompareDblModuleTester(m))
   }
 }

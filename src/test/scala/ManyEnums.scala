@@ -28,42 +28,30 @@
  MODIFICATIONS.
 */
 
-import scala.util.matching.Regex
+//package ChiselTests
 import org.junit.Assert._
 import org.junit.Test
 import org.junit.Ignore
 
 import Chisel._
 
-class FlushPrintfOutput extends TestSuite {
-  @Test def testFlushPrintfOutput() {
-    println("\ntestFlushPrintfOutput ...")
-    val whiteSpaceRE = """\s""".r
-    def eliminateWhiteSpace(s: String): String = whiteSpaceRE.replaceAllIn(s, "")
-
-    class PrintfModule extends Module {
-      val io = new DecoupledUIntIO
-      val counter = Reg(UInt(width = 8), init = UInt(0))
-      val counterString = "counter = %d\n"
-      counter := counter + UInt(1)
-      printf(counterString, counter);
+class ManyEnumsSuite extends TestSuite {
+  @Test def testManyEnums() {
+    println("\ntestManyEnums...")
+    class ManyEnums extends Module {
+      val io = UInt(OUTPUT, 16)
+      val states = Enum(UInt(),
+        List('e_00, 'e_01, 'e_02, 'e_03, 'e_04, 'e_05, 'e_06, 'e_07,
+             'e_08, 'e_09, 'e_10, 'e_11, 'e_12, 'e_13, 'e_14, 'e_15, 'e_16, 'e_17,
+             'e_18, 'e_19, 'e_20, 'e_21, 'e_22))
+      val state = Reg(UInt(), init = states('e_22))
+      io := state
     }
 
-    trait FlushPrintfOutputTests extends Tests {
-      def tests(m: PrintfModule) {
-        for (i <- 0 until 4) {
-          step(1)
-          // Fetch the output printed on stdout by the test.
-          val printfOutput = testOutputString
-          val expectedString = m.counterString.format(i)
-          assertTrue("incorrect output - %s".format(printfOutput), eliminateWhiteSpace(printfOutput) == eliminateWhiteSpace(expectedString))
-        }
-      }
+    class ManyEnumsTester(m: ManyEnums) extends Tester(m) {
+      expect(m.io, 22)
     }
 
-    class FlushPrintfOutputTester(m: PrintfModule) extends Tester(m) with FlushPrintfOutputTests {
-      tests(m)
-    }
-    launchCppTester((m: PrintfModule) => new FlushPrintfOutputTester(m))
+    launchCppTester((c: ManyEnums) => new ManyEnumsTester(c))
   }
 }

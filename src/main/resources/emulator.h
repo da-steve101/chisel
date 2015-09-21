@@ -197,24 +197,25 @@ static void mul_n (val_t d[], val_t s0[], val_t s1[], int nb0, int nb1) {
   }
 }
 
-static void rsha_n (val_t d[], const val_t s0[], const int amount, const int nw, const int w) {
+static void rsha_n (val_t d[], const val_t s0[], const unsigned int amount, const unsigned int nw, const unsigned int w) {
 
-  int n_shift_bits     = amount % val_n_bits();
+  unsigned int n_shift_bits     = amount % val_n_bits();
   int n_shift_words    = amount / val_n_bits();
-  int n_rev_shift_bits = val_n_bits() - n_shift_bits;
+  unsigned int n_rev_shift_bits = val_n_bits() - n_shift_bits;
   int is_zero_carry    = n_shift_bits == 0;
   int msb              = s0[nw-1] >> (w - nw*val_n_bits() - 1);
   val_t carry = 0;
 
-  if (msb == 0)
-    for (int i = 0; i < n_shift_words; i++) {
-      d[nw-i-1] = 0;
-    }
+  n_shift_words = (n_shift_words < 0)  ? 0  : n_shift_words;
+  n_shift_words = (n_shift_words > nw) ? nw : n_shift_words;
+
+  for (int i = 0; i < nw; i++)
+    d[i] = 0;
 
   for (int i = nw-1; i >= n_shift_words; i--) {
     val_t val = s0[i];
-    d[i-n_shift_words] = val >> n_shift_bits | carry;
-    carry              = is_zero_carry ? 0 : val << n_rev_shift_bits;
+    d[i - n_shift_words] = ( val >> n_shift_bits ) | carry;
+    carry  = is_zero_carry ? 0 : val << n_rev_shift_bits;
   }
 
   if (msb == 0) {
@@ -235,12 +236,14 @@ static void rsha_n (val_t d[], const val_t s0[], const int amount, const int nw,
   }
 }
 
-static void rsh_n (val_t d[], const val_t s0[], const int amount, const int nw) {
+static void rsh_n (val_t d[], const val_t s0[], const unsigned int amount, const unsigned int nw) {
   val_t carry = 0;
-  int n_shift_bits     = amount % val_n_bits();
-  int n_shift_words    = amount / val_n_bits();
-  int n_rev_shift_bits = val_n_bits() - n_shift_bits;
-  int is_zero_carry    = n_shift_bits == 0;
+  unsigned int n_shift_bits = amount % val_n_bits();
+  int n_shift_words = amount / val_n_bits();
+  unsigned int n_rev_shift_bits = val_n_bits() - n_shift_bits;
+  int is_zero_carry = n_shift_bits == 0;
+  n_shift_words = (n_shift_words < 0)  ? 0  : n_shift_words;
+  n_shift_words = (n_shift_words > nw) ? nw : n_shift_words;
   for (int i = 0; i < n_shift_words; i++)
     d[nw-i-1] = 0;
   for (int i = nw-1; i >= n_shift_words; i--) {
@@ -1618,6 +1621,8 @@ size_t dat_from_hex(std::string hex_line, dat_t<w>& res, size_t offset = 0) {
     last_digit--;
   }
 
+  size_t rem = w % 64;
+  val_t mask = (rem) ? (1L << rem) - 1 : -1L;
   // Convert the hex data to a dat_t, from right to left.
   int digit_val;
   val_t word_accum = 0;
@@ -1628,16 +1633,16 @@ size_t dat_from_hex(std::string hex_line, dat_t<w>& res, size_t offset = 0) {
       word_accum |= ((val_t)digit_val) << bit;
       bit += 4;
       if (bit == 64) {
-	res.values[w_index] = word_accum;
+        if (w_index == res.n_words - 1) word_accum &= mask;
+	res.values[w_index++] = word_accum;
 	word_accum = 0L;
 	bit = 0;
-	w_index++;
       }
     }
   }
   if (bit != 0) {
-    res.values[w_index] = word_accum;
-    w_index++;
+    if (w_index == res.n_words - 1) word_accum &= mask;
+    res.values[w_index++] = word_accum;
   }
   while(w_index < res.n_words) res.values[w_index++] = 0L;
   if (neg) res = res - 1;
