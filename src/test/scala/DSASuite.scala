@@ -417,6 +417,28 @@ class DSASuite extends TestSuite {
     def apply(a : UInt, b : UInt, c : UInt, d : UInt) : (UInt, UInt) = fourToTwoAdder(a, b, c, d, UInt(0), UInt(0))
   }
 
+  object threeToTwoAdder {
+    def apply(a : UInt, b : UInt, c : UInt, cin : UInt) : (UInt, UInt) =  {
+      val vc = Vec.fill(b.getWidth() + 1){UInt(width=1)}
+      vc(0) := cin
+      val vs = Vec.fill(b.getWidth()){UInt(width=1)}
+      for (i <- 0 until b.getWidth()) {
+        val (r, cs) = FullAdder(a(i), b(i), c(i))
+        vs(i) := r
+        vc(i + 1) := cs
+      }
+
+      val vcF = Vec.fill(a.getWidth()){UInt(width=1)}
+      for (i <- 0 until a.getWidth()) {
+        vcF(i) := vc(i)
+      }
+
+      (vs.toBits.toUInt, vcF.toBits.toUInt)
+    }
+
+    def apply(a : UInt, b : UInt, c : UInt) : (UInt, UInt) = fourToTwoAdder(a, b, c, UInt(0))
+  }
+
   object SignedDigitAdder {
     def apply(a : UInt, b : UInt) : UInt = {
       
@@ -565,37 +587,43 @@ class DSASuite extends TestSuite {
       val caD = Reg(init=UInt(0, width=14))
       val ws = Reg(init=UInt(0, width=14))
       val wc = Reg(init=UInt(0, width=14))
-      val nxtQ = Reg(init=UInt(0, width=1))
+      val nxtQ = Reg(init=UInt(0, width=2))
 
       // d[j + 1] = CA(d[j], dj5)
-      val newD = SDOnlineConversion(d, start)
+      val newD = UInt(width=14)
+      newD := SDOnlineConversion(d, start)
       caD := newD
 
       // D Selector : -qj1*d[j + 1]
-      val inD = MuxCase(UInt(0), Array(
-        (nxtQ === UInt("b01")) -> newD,
-        (nxtQ === UInt("b10")) -> ~newD
+      val inD = UInt(width=14)
+      inD := MuxCase(UInt(0), Array(
+        (nxtQ === UInt("b10")) -> newD,
+        (nxtQ === UInt("b01")) -> ~newD
         ))
 
       // Q Selector : -q[j]*dj5*2^-4
-      val inQ = MuxCase(UInt(0), Array(
-        (d === UInt("b01")) -> caQ,
-        (d === UInt("b10")) -> ~caQ
+      val inQ = UInt(width=14)
+      inQ := MuxCase(UInt(0), Array(
+        (d === UInt("b10")) -> caQ,
+        (d === UInt("b01")) -> ~caQ
         )) >> 4
 
       // xj5*2^-4 - q[j]*dk5*2^-4
-      // val inXQ = x
+      val inWS = UInt(width=14)
+      inWS := Cat(U(x, d, nxtQ), ws(ws.getWidth() - 6, 0))
+      val inWC = UInt(width=14)
+      inWC := Cat(Fill(6, UInt(0)), wc(wc.getWidth() - 6, 0))
 
       // Carry cd
       val cD = Mux( ((nxtQ === UInt("b10")) & (d === UInt("b10"))) | ((nxtQ === UInt("b01")) & (d === UInt("b01"))), UInt(1), UInt(0))
 
       // v[j] = 2w[j] + xj5*2^-4 - q[j]*dj5*2^-4
-      val (s1, c1) = CarrySaveAdder(ws, wc, inQ, cD)
+      val (s1, c1) = threeToTwoAdder(inWS, inWC, inQ, cD)
 
       // qj1 = SELD(v[j])
-      val v = s1(s1.getWidth() - 1, s1.getWidth() - 6) + c1(c1.getWidth() - 1, c1.getWidth() - 6)
+      val v = s1(s1.getWidth() - 1, s1.getWidth() - 5) + c1(c1.getWidth() - 1, c1.getWidth() - 5)
       val nQ = SEL(v)
-      
+
       nxtQ := nQ
 
       // q[j + 1] = CA(q[j], qj1)
@@ -605,7 +633,7 @@ class DSASuite extends TestSuite {
       val cQ = Mux( ((nxtQ === UInt("b10")) & (d === UInt("b10"))) | ((nxtQ === UInt("b01")) & (d === UInt("b01"))), UInt(1), UInt(0))
 
       // w[j + 1] = v[j] - qj1*d[j + 1]
-      val (s2, c2) = CarrySaveAdder(s1, c1, inD, cQ)
+      val (s2, c2) = threeToTwoAdder(s1, c1, inD, cQ)
 
       ws := s2 << 1
       wc := c2 << 1
@@ -634,21 +662,34 @@ class DSASuite extends TestSuite {
 
       // Mux Implementation
       MuxCase(UInt("b000000"), Array(
+        
+        ((x === UInt("b10")) & (d === UInt("b10")) & (q === UInt("b01"))) -> UInt("b000001"), // 1 (Neg Q)
         ((x === UInt("b10")) & (d === UInt("b10"))) -> UInt("b000000"), // 1
         ((x === UInt("b10")) & (d === UInt("b00"))) -> UInt("b000001"), // 2
         ((x === UInt("b10")) & (d === UInt("b11"))) -> UInt("b000001"), // 2
+        ((x === UInt("b10")) & (d === UInt("b01")) & (q === UInt("b01"))) -> UInt("b000000"), // 3
         ((x === UInt("b10")) & (d === UInt("b01"))) -> UInt("b000001"), // 3
+        
+        ((x === UInt("b00")) & (d === UInt("b10")) & (q === UInt("b01"))) -> UInt("b000000"), // 4
         ((x === UInt("b00")) & (d === UInt("b10"))) -> UInt("b111111"), // 4
         ((x === UInt("b00")) & (d === UInt("b00"))) -> UInt("b000000"), // 5
         ((x === UInt("b00")) & (d === UInt("b11"))) -> UInt("b000000"), // 5
+        ((x === UInt("b00")) & (d === UInt("b01")) & (q === UInt("b01"))) -> UInt("b111111"), // 6
         ((x === UInt("b00")) & (d === UInt("b01"))) -> UInt("b000000"), // 6
+        
+        ((x === UInt("b11")) & (d === UInt("b10")) & (q === UInt("b01"))) -> UInt("b000000"), // 4
         ((x === UInt("b11")) & (d === UInt("b10"))) -> UInt("b111111"), // 4
         ((x === UInt("b11")) & (d === UInt("b00"))) -> UInt("b000000"), // 5
         ((x === UInt("b11")) & (d === UInt("b11"))) -> UInt("b000000"), // 5
+        ((x === UInt("b11")) & (d === UInt("b01")) & (q === UInt("b01"))) -> UInt("b111111"), // 6
         ((x === UInt("b11")) & (d === UInt("b01"))) -> UInt("b000000"), // 6
+
+
+        ((x === UInt("b01")) & (d === UInt("b10")) & (q === UInt("b01"))) -> UInt("b111111"), // 7
         ((x === UInt("b01")) & (d === UInt("b10"))) -> UInt("b111110"), // 7
         ((x === UInt("b01")) & (d === UInt("b00"))) -> UInt("b111111"), // 8
         ((x === UInt("b01")) & (d === UInt("b11"))) -> UInt("b111111"), // 8
+        ((x === UInt("b01")) & (d === UInt("b01")) & (q === UInt("b01"))) -> UInt("b111110"),  // 9
         ((x === UInt("b01")) & (d === UInt("b01"))) -> UInt("b111111")  // 9
         ))
     }
@@ -1025,6 +1066,50 @@ class DSASuite extends TestSuite {
     launchCppTester((c : MSDFDivUTest) => new MSDFDivUTests(c))
   }
 
+  @Test def testMSDFDiv() {
+    class MSDFDivTest extends Module {
+      val io = new Bundle {
+        val x = UInt(INPUT, 2)
+        val d = UInt(INPUT, 2)
+        val start = Bool(INPUT)
+        val c = UInt(OUTPUT, 2)
+      }
+      io.c := MSDFDiv(io.x, io.d, io.start)
+    }
+
+    class MSDFDivTests(c : MSDFDivTest) extends Tester(c) {
+
+      for (i <- 0 until trials) {
+        var dX = r.nextDouble()/2
+        var dD = r.nextDouble()/2
+        while (dX/dD > 1.0) {
+          dX = r.nextDouble()/2
+          dD = r.nextDouble()/2
+        }
+        val x = doubleToSigned(dX, 8)
+        val d = doubleToSigned(dD, 8)
+        val res = new ArrayBuffer[Int]
+        for (j <- 0 until x.length + 4) {
+          val inX = if(j < x.length) x(j) else 0
+          val inD = if(j < d.length) d(j) else 0
+          poke(c.io.x, toSignedDigit(inX))
+          poke(c.io.d, toSignedDigit(inD))
+          val start = if (j == 0) BigInt(1) else BigInt(0)
+          poke(c.io.start, start)
+          if (j >= 4)
+            res ++= fromSignedDigit(peek(c.io.c).toInt)
+          step(1)
+        }
+        val expectedRes = signedToDouble(x)/signedToDouble(d)
+        val dRes = signedToDouble(res.toList)
+        val err = scala.math.abs(expectedRes - dRes)
+        val correct = if (err > scala.math.pow(2, -8)) false else true
+        expect(correct, "Expected: " + expectedRes.toString + "(" + (dX*dD).toString + ")" + "\tGot: " + dRes.toString + "\tError: " + err.toString)
+      }
+    }
+    launchCppTester((c : MSDFDivTest) => new MSDFDivTests(c))
+  }
+
   @Test def testSDOnlineConversion() {
     class SDOnlineConversionTest extends Module {
       val io = new Bundle {
@@ -1114,6 +1199,36 @@ class DSASuite extends TestSuite {
     }
 
     launchCppTester((c : CarrySaveAdderTest) => new CarrySaveAdderTests(c))
+  }
+
+  @Test def testthreeToTwoAdderOneCarry() {
+    class threeToTwoAdderOneCarryTest extends Module {
+      val io = new Bundle {
+        val a = UInt(INPUT, totalWidth)
+        val b = UInt(INPUT, totalWidth)
+        val c = UInt(INPUT, totalWidth)
+        val cin = UInt(INPUT, 1)
+        val e = UInt(OUTPUT, totalWidth)
+      }
+      val (r, cout) = threeToTwoAdder(io.a, io.b, io.c, io.cin)
+      io.e := r + cout
+    }
+
+    class threeToTwoAdderOneCarryTests(c : threeToTwoAdderOneCarryTest) extends Tester(c) {
+      for (i <- 0 until trials) {
+        val inA = BigInt(totalWidth, r)
+        val inB = BigInt(totalWidth, r)
+        val inC = BigInt(totalWidth, r)
+        val inCin = BigInt(1, r)
+        poke(c.io.a, inA)
+        poke(c.io.b, inB)
+        poke(c.io.c, inC)
+        poke(c.io.cin, inCin)
+        expect(c.io.e, inA + inB + inC + inCin)
+      }
+    }
+
+    launchCppTester((c : threeToTwoAdderOneCarryTest) => new threeToTwoAdderOneCarryTests(c))
   }
 
   @Test def testfourToTwoAdder() {
