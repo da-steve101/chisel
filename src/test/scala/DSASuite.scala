@@ -526,8 +526,8 @@ class DSASuite extends TestSuite {
       }      
 
       // Do the second stage
-      val t = Vec.fill(a.getWidth()/2 - 1){Reg(init=UInt(width=1))}
-      val w = Vec.fill(a.getWidth()/2){Reg(init=UInt(width=1))}
+      val t = Vec.fill(a.getWidth()/2 - 1){Reg(init=UInt(0, width=1))}
+      val w = Vec.fill(a.getWidth()/2){Reg(init=UInt(0, width=1))}
       val tTrans = UInt(width=1)
       val (w0, t1) = if (a.getWidth()/2 != 1) {
         FullAdder(v(0), ~bn(0), h(0))
@@ -1819,37 +1819,43 @@ class DSASuite extends TestSuite {
     launchCppTester((c : MSDFAddAccumTest) => new MSDFAddAccumTests(c))
   }
 
-  @Test def testMSDFLMS() {
+  @Test def testMSDFLMSForward() {
     class MSDFLMSTest extends Module {
       val io = new Bundle {
         val x = Vec.fill(2){UInt(INPUT, 2)}
         val inW = Vec.fill(2){UInt(INPUT, 2)}
         val y = UInt(INPUT, 2)
+        val stepSize = UInt(INPUT, 2)
         val start = Bool(INPUT)
         val ybar = UInt(OUTPUT, 2)
+        val outErr = UInt(OUTPUT, 2)
+        val outStep = UInt(OUTPUT, 2)
         val outW = Vec.fill(2){UInt(OUTPUT, 2)}
       }
       val threeDelay = ShiftRegister(io.start, 3)
-      val dotProduct = (io.x, io.inW).zipped.map((ai, bi) => MSDFMul(ai, bi, io.start)).reduce((r, c) => MSDFAdd(r, c, threeDelay))
+      val dotProduct = (io.x, io.inW).zipped.map((ai, bi) => MSDFMul(ai, bi, io.start)).reduce((r, c) => MSDFAdd(r, c, threeDelay)) // 5 Delay
 
       io.ybar := dotProduct
 
       val yDelay = UInt(width=2)
       yDelay := ShiftRegister(io.y, 5)
       val fiveDelay = ShiftRegister(io.start, 5)
-      val err = MSDFSub(yDelay, dotProduct, fiveDelay)
+      val err = MSDFSub(yDelay, dotProduct, fiveDelay) // 2 Delay (7 Total)
+      io.outErr := err
 
+      val stepDelay = UInt(width=2)
+      stepDelay := ShiftRegister(io.stepSize, 7)
       val sevenDelay = ShiftRegister(io.start, 7)
-      val stepSize = MSDFLiteral(Cat(UInt("b10"), Fill(UInt(0), 30)), 7)
-      val step = MSDFMul(stepSize, err, sevenDelay)
+      val step = MSDFMul(stepDelay, err, sevenDelay) // 3 Delay (10 Total)
+      io.outStep := step
 
-      val tenDelay = ShiftRegister(io.start, 12)
+      val tenDelay = ShiftRegister(io.start, 10)
       val xDelay = Vec.fill(2){UInt(width=2)}
-      xDelay := ShiftRegister(io.x, 12)
+      xDelay := ShiftRegister(io.x, 10)
       val wDelay = Vec.fill(2){UInt(width=2)}
-      wDelay := ShiftRegister(io.inW, 12)
-      val thirteenDelay = ShiftRegister(io.start, 15)
-      val wUpdate = (wDelay, xDelay).zipped.map((w1, y1) => MSDFAdd(w1, MSDFMul(y1, step, tenDelay), thirteenDelay))
+      wDelay := ShiftRegister(io.inW, 13)
+      val thirteenDelay = ShiftRegister(io.start, 13)
+      val wUpdate = (wDelay, xDelay.map(x1 => MSDFMul(x1, step, tenDelay))).zipped.map((w1, x1) => MSDFAdd(w1, x1, thirteenDelay)) // 5 Delay (15 Total)
 
       io.outW := wUpdate
 
@@ -1873,7 +1879,9 @@ class DSASuite extends TestSuite {
 
       val digitSize = 16
       val ybarDelay = 5
-      val wUpdateDelay = 20
+      val errDelay = 7
+      val stepDelay = 10
+      val wUpdateDelay = 15
 
       val stepSize : Double = 0.5
 
@@ -1885,9 +1893,12 @@ class DSASuite extends TestSuite {
         val x = dX.map(in => doubleToSigned(in, digitSize))
         val w = dW.map(in => doubleToSigned(in, digitSize))
         val y = doubleToSigned(dY, digitSize)
+        val stepS = doubleToSigned(stepSize, digitSize)
 
         val wRes = List.fill(2){new ArrayBuffer[Int]}
         val yRes = new ArrayBuffer[Int]
+        val errRes = new ArrayBuffer[Int]
+        val stepRes = new ArrayBuffer[Int]
 
         for (j <- 0 until digitSize + wUpdateDelay) {
           // X & W Input
@@ -1902,6 +1913,10 @@ class DSASuite extends TestSuite {
           val inY = if(j < digitSize) y(j) else 0
           poke(c.io.y, toSignedDigit(inY))
 
+          // Step Input
+          val inStep = if(j < digitSize) stepS(j) else 0
+          poke(c.io.stepSize, toSignedDigit(inStep))
+
           // Start Input
           val start = if (j == 0) 1 else 0
           poke(c.io.start, start)
@@ -1909,6 +1924,12 @@ class DSASuite extends TestSuite {
 
           if ((j >= ybarDelay) & (j < ybarDelay+digitSize))
             yRes ++= fromSignedDigit(peek(c.io.ybar).toInt)
+
+          if ((j >= errDelay) & (j < errDelay+digitSize))
+            errRes ++= fromSignedDigit(peek(c.io.outErr).toInt)
+
+          if ((j >= stepDelay) & (j < stepDelay+digitSize))
+            stepRes ++= fromSignedDigit(peek(c.io.outStep).toInt)
 
           if ((j >= wUpdateDelay) & (j < wUpdateDelay+digitSize)) {
             for (k <- 0 until 2) {
@@ -1926,11 +1947,213 @@ class DSASuite extends TestSuite {
         println("yBar:")
         compare(yBar, signedToDouble(yRes.toList))
 
+        // lmsErr
+        println("lmsErr:")
+        compare(lmsErr, signedToDouble(errRes.toList))
+
+        // lmsStep
+        println("lmsStep:")
+        compare(lmsStep, signedToDouble(stepRes.toList))
+
         // w
         for (j <- 0 until 2) {
           println("w(" + j.toString + "): ")
           compare(wUpdate(j), signedToDouble(wRes(j).toList))
         }
+      }
+    }
+    launchCppTester((c : MSDFLMSTest) => new MSDFLMSTests(c))
+  }
+
+  @Test def testMSDFLMS() {
+    class MSDFLMSTest extends Module {
+      val io = new Bundle {
+        val x = Vec.fill(2){UInt(INPUT, 2)}
+        val inW = Vec.fill(2){UInt(INPUT, 2)}
+        val y = UInt(INPUT, 2)
+        val stepSize = UInt(INPUT, 2)
+        val start = Bool(INPUT)
+        val ybar = UInt(OUTPUT, 2)
+        val outErr = UInt(OUTPUT, 2)
+        val outStep = UInt(OUTPUT, 2)
+        val outW = Vec.fill(2){UInt(OUTPUT, 2)}
+      }
+      val threeDelay = ShiftRegister(io.start, 3)
+      val dotProduct = (io.x, io.inW).zipped.map((ai, bi) => MSDFMul(ai, bi, io.start)).reduce((r, c) => MSDFAdd(r, c, threeDelay)) // 5 Delay
+
+      io.ybar := dotProduct
+
+      val yDelay = UInt(width=2)
+      yDelay := ShiftRegister(io.y, 5)
+      val fiveDelay = ShiftRegister(io.start, 5)
+      val err = MSDFSub(yDelay, dotProduct, fiveDelay) // 2 Delay (7 Total)
+      io.outErr := err
+
+      val stepDelay = UInt(width=2)
+      stepDelay := ShiftRegister(io.stepSize, 7)
+      val sevenDelay = ShiftRegister(io.start, 7)
+      val step = MSDFMul(stepDelay, err, sevenDelay) // 3 Delay (10 Total)
+      io.outStep := step
+
+      val tenDelay = ShiftRegister(io.start, 10)
+      val xDelay = Vec.fill(2){UInt(width=2)}
+      xDelay := ShiftRegister(io.x, 10)
+      val wDelay = Vec.fill(2){UInt(width=2)}
+      wDelay := ShiftRegister(io.inW, 13)
+      val thirteenDelay = ShiftRegister(io.start, 13)
+      val wUpdate = (wDelay, xDelay.map(x1 => MSDFMul(x1, step, tenDelay))).zipped.map((w1, x1) => MSDFAdd(w1, x1, thirteenDelay)) // 5 Delay (15 Total)
+
+      io.outW := wUpdate
+
+    }
+
+    class MSDFLMSTests(c : MSDFLMSTest) extends Tester(c) {
+
+      def compare(expectedRes : Double, dRes : Double) {
+        val err = scala.math.abs(expectedRes - dRes)
+        val correct = if (err > scala.math.pow(2, -8)) false else true
+        expect(correct, "Expected: " + expectedRes.toString + "\tGot: " + dRes.toString + "\tError: " + err.toString)
+      }
+
+      def update(x : List[Double], y : Double, w : List[Double], stepSize : Double) = {
+        val yBar = (x, w).zipped.map(_*_).reduce(_+_)
+        val err = y - yBar
+        val step = stepSize*err
+        val wUpdate = (x.map(step*_), w).zipped.map(_+_)
+        (yBar, wUpdate, err, step)
+      }
+
+      val digitSize = 16
+      val ybarDelay = 5
+      val errDelay = 7
+      val stepDelay = 10
+      val wUpdateDelay = 15
+
+      val stepSize : Double = 0.5
+
+      val yBarRes = new scala.collection.mutable.Queue[Double]
+      val wUpdateRes = new scala.collection.mutable.Queue[List[Double]]
+      val lmsErrRes = new scala.collection.mutable.Queue[Double]
+      val lmsStepRes = new scala.collection.mutable.Queue[Double]
+
+      // Counters
+      var yBarCount = digitSize - ybarDelay
+      var errCount = digitSize - errDelay
+      var stepCount = digitSize - stepDelay
+      var wUpdateCount = digitSize - wUpdateDelay
+
+      var updateW : Boolean = false
+      var updateY : Boolean = false
+      var updateErr : Boolean = false
+      var updateStep : Boolean = false
+
+      val w = List.fill(2){ArrayBuffer.fill(digitSize){0}}
+      var yRes = new ArrayBuffer[Int]
+      var errRes = new ArrayBuffer[Int]
+      var stepRes = new ArrayBuffer[Int]
+
+      for (i <- 0 until trials) {
+
+
+        val dX : List[Double] = List.fill(2){r.nextDouble()/2}
+        val dY : Double = r.nextDouble()/2
+        val x = dX.map(in => doubleToSigned(in, digitSize))
+        val y = doubleToSigned(dY, digitSize)
+        val stepS = doubleToSigned(stepSize, digitSize)
+
+
+        // Expected Results
+        val (yBar, wUpdate, lmsErr, lmsStep) = update(dX, dY, w.map(w1 => signedToDouble(w1.toList)), stepSize)
+        yBarRes.enqueue(yBar)
+        wUpdateRes.enqueue(wUpdate)
+        lmsErrRes.enqueue(lmsErr)
+        lmsStepRes.enqueue(lmsStep)
+
+        println("New Input")
+
+        for (j <- 0 until digitSize) {
+          // X & W Input
+          for (k <- 0 until 2) {
+           val inX = if(j < digitSize) x(k)(j) else 0
+           val inW = if(j < digitSize) w(k)(j) else 0
+           poke(c.io.x(k), toSignedDigit(inX)) 
+           poke(c.io.inW(k), toSignedDigit(inW)) 
+          }
+
+          // Y Input
+          val inY = if(j < digitSize) y(j) else 0
+          poke(c.io.y, toSignedDigit(inY))
+
+          // Step Input
+          val inStep = if(j < digitSize) stepS(j) else 0
+          poke(c.io.stepSize, toSignedDigit(inStep))
+
+          // Start Input
+          val start = if (j == 0) 1 else 0
+          poke(c.io.start, start)
+
+          if (updateY) {
+            yRes ++= fromSignedDigit(peek(c.io.ybar).toInt)
+          }
+
+          if (updateErr) {
+            errRes ++= fromSignedDigit(peek(c.io.outErr).toInt)
+          }
+
+          if (updateStep){
+            stepRes ++= fromSignedDigit(peek(c.io.outStep).toInt)
+          }
+
+          if (updateW) {
+            for (k <- 0 until 2) {
+              w(k)(wUpdateCount) = fromSignedDigit(peek(c.io.outW(k)).toInt)(0)
+            }
+          }
+
+         yBarCount = if(yBarCount == digitSize -1) 0 else yBarCount + 1
+         errCount = if(errCount == digitSize -1) 0 else errCount + 1
+         stepCount = if(stepCount == digitSize -1) 0 else stepCount + 1
+         wUpdateCount = if(wUpdateCount == digitSize -1) 0 else wUpdateCount + 1
+         if(wUpdateCount == digitSize -1) updateW = true
+         if(yBarCount == digitSize -1) updateY = true
+         if(errCount == digitSize -1) updateErr = true
+         if(stepCount == digitSize -1) updateStep = true
+
+         if (i != 0) {
+           if (yBarCount == 0) {
+            // yBar
+            println("yBar:")
+            compare(yBarRes.dequeue(), signedToDouble(yRes.toList))
+            yRes = new ArrayBuffer[Int]
+           }
+           if (errCount == 0) {
+            // lmsErr
+            println("lmsErr:")
+            compare(lmsErrRes.dequeue(), signedToDouble(errRes.toList))
+            errRes = new ArrayBuffer[Int]
+           }
+
+           if (stepCount == 0) {
+            // lmsStep
+            println("lmsStep:")
+            compare(lmsStepRes.dequeue(), signedToDouble(stepRes.toList))
+            stepRes = new ArrayBuffer[Int]
+           }
+
+           if (wUpdateCount == 0) {
+            // w
+            val wRes = wUpdateRes.dequeue()
+            for (j <- 0 until 2) {
+              println("w(" + j.toString + "): ")
+              compare(wRes(j), signedToDouble(w(j).toList))
+            }
+           }
+          }
+
+          step(1)
+        }
+
+
       }
     }
     launchCppTester((c : MSDFLMSTest) => new MSDFLMSTests(c))
