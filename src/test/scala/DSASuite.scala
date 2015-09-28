@@ -1883,7 +1883,7 @@ class DSASuite extends TestSuite {
       val stepDelay = 10
       val wUpdateDelay = 15
 
-      val stepSize : Double = 0.5
+      val stepSize : Double = 0.125
 
       for (i <- 0 until trials) {
 
@@ -2009,10 +2009,12 @@ class DSASuite extends TestSuite {
 
     class MSDFLMSTests(c : MSDFLMSTest) extends Tester(c) {
 
-      def compare(expectedRes : Double, dRes : Double) {
-        val err = scala.math.abs(expectedRes - dRes)
-        val correct = if (err > scala.math.pow(2, -8)) false else true
-        expect(correct, "Expected: " + expectedRes.toString + "\tGot: " + dRes.toString + "\tError: " + err.toString)
+      def compare(expectedRes : Double, dRes : Double, count : Int) {
+        if (count != 0) {
+          val err = scala.math.abs(expectedRes - dRes)
+          val correct = if (err > scala.math.pow(2, -8)) false else true
+          expect(correct, "Expected: " + expectedRes.toString + "\tGot: " + dRes.toString + "\tError: " + err.toString)
+        }
       }
 
       def update(x : List[Double], y : Double, w : List[Double], stepSize : Double) = {
@@ -2029,18 +2031,22 @@ class DSASuite extends TestSuite {
       val stepDelay = 10
       val wUpdateDelay = 15
 
-      val stepSize : Double = 0.5
+      val stepSize : Double = 0.125
 
       val yBarRes = new scala.collection.mutable.Queue[Double]
       val wUpdateRes = new scala.collection.mutable.Queue[List[Double]]
       val lmsErrRes = new scala.collection.mutable.Queue[Double]
       val lmsStepRes = new scala.collection.mutable.Queue[Double]
 
+      val yQ = new scala.collection.mutable.Queue[Double]
+      val xQ = new scala.collection.mutable.Queue[List[Double]]
+
       // Counters
       var yBarCount = digitSize - ybarDelay
       var errCount = digitSize - errDelay
-      var stepCount = digitSize - stepDelay
+      var stepCount = digitSize - stepDelay 
       var wUpdateCount = digitSize - wUpdateDelay
+      var compareCount = 0
 
       var updateW : Boolean = false
       var updateY : Boolean = false
@@ -2048,28 +2054,37 @@ class DSASuite extends TestSuite {
       var updateStep : Boolean = false
 
       val w = List.fill(2){ArrayBuffer.fill(digitSize){0}}
+      var prevW = List.fill(2){ArrayBuffer.fill(digitSize){0}}
       var yRes = new ArrayBuffer[Int]
       var errRes = new ArrayBuffer[Int]
       var stepRes = new ArrayBuffer[Int]
 
-      for (i <- 0 until trials) {
+      for (i <- 0 until trials*10) {
 
 
         val dX : List[Double] = List.fill(2){r.nextDouble()/2}
-        val dY : Double = r.nextDouble()/2
+        val dY : Double = dX.reduce(_*_)
         val x = dX.map(in => doubleToSigned(in, digitSize))
+        xQ.enqueue(x.map(in => signedToDouble(in)))
         val y = doubleToSigned(dY, digitSize)
+        yQ.enqueue(signedToDouble(y))
         val stepS = doubleToSigned(stepSize, digitSize)
 
 
         // Expected Results
-        val (yBar, wUpdate, lmsErr, lmsStep) = update(dX, dY, w.map(w1 => signedToDouble(w1.toList)), stepSize)
-        yBarRes.enqueue(yBar)
-        wUpdateRes.enqueue(wUpdate)
-        lmsErrRes.enqueue(lmsErr)
-        lmsStepRes.enqueue(lmsStep)
+        if (i != 0) {
+          val (yBar, wUpdate, lmsErr, lmsStep) = update(xQ.dequeue(), yQ.dequeue(), prevW.map(w1 => signedToDouble(w1.toList)), stepSize)
+          yBarRes.enqueue(yBar)
+          wUpdateRes.enqueue(wUpdate)
+          lmsErrRes.enqueue(lmsErr)
+          lmsStepRes.enqueue(lmsStep)
+        }
 
         println("New Input")
+        println("yBarCount: " + yBarCount.toString)
+        println("errCount: " + errCount.toString)
+        println("stepCount: " + stepCount.toString)
+        println("wUpdateCount: " + wUpdateCount.toString)
 
         for (j <- 0 until digitSize) {
           // X & W Input
@@ -2114,7 +2129,10 @@ class DSASuite extends TestSuite {
          errCount = if(errCount == digitSize -1) 0 else errCount + 1
          stepCount = if(stepCount == digitSize -1) 0 else stepCount + 1
          wUpdateCount = if(wUpdateCount == digitSize -1) 0 else wUpdateCount + 1
-         if(wUpdateCount == digitSize -1) updateW = true
+         if(wUpdateCount == digitSize -1) {
+          updateW = true
+          prevW = w
+        }
          if(yBarCount == digitSize -1) updateY = true
          if(errCount == digitSize -1) updateErr = true
          if(stepCount == digitSize -1) updateStep = true
@@ -2123,20 +2141,23 @@ class DSASuite extends TestSuite {
            if (yBarCount == 0) {
             // yBar
             println("yBar:")
-            compare(yBarRes.dequeue(), signedToDouble(yRes.toList))
+            println(yRes.toList)
+            compare(yBarRes.dequeue(), signedToDouble(yRes.toList), compareCount)
             yRes = new ArrayBuffer[Int]
            }
            if (errCount == 0) {
             // lmsErr
             println("lmsErr:")
-            compare(lmsErrRes.dequeue(), signedToDouble(errRes.toList))
+            println(errRes.toList)
+            compare(lmsErrRes.dequeue(), signedToDouble(errRes.toList), compareCount)
             errRes = new ArrayBuffer[Int]
            }
 
            if (stepCount == 0) {
             // lmsStep
             println("lmsStep:")
-            compare(lmsStepRes.dequeue(), signedToDouble(stepRes.toList))
+            println(stepRes.toList)
+            compare(lmsStepRes.dequeue(), signedToDouble(stepRes.toList), compareCount)
             stepRes = new ArrayBuffer[Int]
            }
 
@@ -2145,8 +2166,10 @@ class DSASuite extends TestSuite {
             val wRes = wUpdateRes.dequeue()
             for (j <- 0 until 2) {
               println("w(" + j.toString + "): ")
-              compare(wRes(j), signedToDouble(w(j).toList))
+              println(w(j).toList)
+              compare(wRes(j), signedToDouble(w(j).toList), compareCount)
             }
+            compareCount += 1
            }
           }
 
